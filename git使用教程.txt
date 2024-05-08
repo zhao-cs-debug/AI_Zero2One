@@ -2,7 +2,7 @@ git clone xxx.git
 git checkout -b main-feature    # 创建分支（local）
 git diff    # 检查文件做了哪些改变（Disk磁盘区）
 git add .   # 把文件放入到暂存区(Disk)
-git commit  # 把需要修改的暂存区真正放入到git里(local)
+git commit -m xxx # 把需要修改的暂存区真正放入到git里(local), -m表示我提交时需要描述的内容
 git push origin main-feature    # 告知github多出一个分支（Remote）
 
 git checkout main   # 修改状态（Disk）
