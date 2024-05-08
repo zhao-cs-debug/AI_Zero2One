@@ -1,0 +1,23 @@
+git clone xxx.git
+git checkout -b main-feature    # 创建分支（local）
+git diff    # 检查文件做了哪些改变（Disk磁盘区）
+git add .   # 把文件放入到暂存区(Disk)
+git commit -m xxx # 把需要修改的暂存区真正放入到git里(local), -m表示我提交时需要描述的内容
+git push origin main-feature    # 告知github多出一个分支（Remote）
+
+git checkout main   # 修改状态（Disk）
+git pull origin main  # 将(Remote)的main同步到(local和Disk)的main里
+
+git checkout main-feature   # 切换状态（Disk）
+git rebase main     # 先把我的修改扔到一边，把main最新的修改拿过来，并且在这个最新修改的main基础之上，再把commit给合并进去。（Local和Disk）都有变化
+可能会有rebase conflict，需要手动选择提交哪段代码
+# 以上操作相当于在最新的main分支上做了我们的修改
+
+git push -f origin main-feature # 将(local)的git上传到github上，-f表示force，强行push
+
+在github上合并main-feature分支（pull request）
+或 可在gitlens上合并分支
+
+
+（可选）git push origin --delete main-feature   # 删除(Remote)分支
+       git branch -d main-feature       # 删除(local)分支
