@@ -13,11 +13,19 @@ git rebase main     # 先把我的修改扔到一边，把main最新的修改拿
 可能会有rebase conflict，需要手动选择提交哪段代码
 # 以上操作相当于在最新的main分支上做了我们的修改
 
-git push -f origin main-feature # 将(local)的git上传到github上，-f表示force，强行push
+git add ./    # 解决冲突
+
+git push -f origin main-feature # 将(local)的git上传到github上，-f表示force，强行push到main-feature分支
 
 在github上合并main-feature分支（pull request）
 或 可在gitlens上合并分支
 
+git checkout main
+git merge main-feature      # 将main-feature分支合并到main分支，并在github上操作合并
+
+git push origin main     # 将更新后的main分支推送到远程仓库
+
+#总之，遵循一个原则，先操作main-feature分支，再操作main分支
 
 （可选）git push origin --delete main-feature   # 删除(Remote)分支
        git branch -d main-feature       # 删除(local)分支
