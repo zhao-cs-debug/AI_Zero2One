@@ -1,3 +1,0 @@
-# Auto detect text files and perform LF normalization
-data/text2vec_models filter=lfs diff=lfs merge=lfs -text
-*.js linguist-language=Python
