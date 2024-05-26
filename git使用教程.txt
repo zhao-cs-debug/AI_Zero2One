@@ -23,7 +23,7 @@ git push -f origin main-feature # 将(local)的git上传到github上，-f表示f
 git checkout main
 git merge main-feature      # 将main-feature分支合并到main分支，并在github上操作合并
 
-git push origin main     # 将更新后的main分支推送到远程仓库
+git push origin main     # 将更新后的main分支推送到远程仓库/或者在github上进行操作，但是本地仓库需要完成git merge main-feature。
 
 #总之，遵循一个原则，先操作main-feature分支，再操作main分支
 
