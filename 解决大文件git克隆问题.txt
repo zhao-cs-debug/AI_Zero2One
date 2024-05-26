@@ -1,0 +1,12 @@
+git clone --depth 1 <repository-url>
+cd xx
+git fetch --depth=5   # 增加深度至5
+git fetch --depth=50  # 然后增加深度至50
+git fetch --unshallow  # 移除深度限制，变成完整克隆
+
+可能还需要git config --global http.version HTTP/1.1
+git config --global http.proxy socks5://127.0.0.1:1080
+git config --global https.proxy socks5://127.0.0.1:1080
+
+主要看.gitconfig文件
+
