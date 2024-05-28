@@ -36,8 +36,8 @@ def train():
             optimzer.step()
             if iter_count%1000==0:
                 print('epoch:{} iter:{},loss:{}'.format(epoch,iter_count,loss))
-                torch.save(model.state_dict(),'.dit_mnist.pth')
-                os.replace('.dit_mnist.pth','dit_mnist.pth')
+                torch.save(model.state_dict(),'dit_mnist.pth.tmp')
+                os.replace('dit_mnist.pth.tmp','dit_mnist.pth')
             iter_count+=1
 
 if __name__ == '__main__':
