@@ -1,6 +1,6 @@
+import math
 import torch
 from torch import nn
-import math
 
 class TimeEmbedding(nn.Module):
     def __init__(self,emb_size):

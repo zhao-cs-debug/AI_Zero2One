@@ -1,10 +1,10 @@
-from torch.utils.data import DataLoader
-from data import MNIST
-from add_noise import forward_add_noise
+import os
 import torch
 from torch import nn
-import os
 from unet import UNet
+from data import MNIST
+from torch.utils.data import DataLoader
+from add_noise import *
 
 EPOCH=200
 BATCH_SIZE=100      # 占用显存过大，调小这个

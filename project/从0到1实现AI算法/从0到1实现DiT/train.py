@@ -1,10 +1,10 @@
-from torch.utils.data import DataLoader
-from data import MNIST
-from add_noise import forward_add_noise
+import os
 import torch
 from torch import nn
-import os
 from dit import DiT
+from data import MNIST
+from torch.utils.data import DataLoader
+from add_noise import *
 
 EPOCH=500
 BATCH_SIZE=300

@@ -1,6 +1,6 @@
+import math
 import torch
 from torch import nn
-import math
 
 class PatchEmbedding(nn.Module):
     def __init__(self, in_channels=3, patch_size=16, emb_size=768, img_size=224):

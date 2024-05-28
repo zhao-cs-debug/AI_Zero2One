@@ -1,6 +1,6 @@
+import torchvision
 from torch.utils.data import Dataset
 from torchvision.transforms import PILToTensor,Compose
-import torchvision
 
 # 手写数字
 class MNIST(Dataset):

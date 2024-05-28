@@ -1,11 +1,11 @@
-from torch.utils.data import DataLoader
-from data import MNIST
-from add_noise import forward_add_noise
+import os
 import torch
 from torch import nn
-import os
 from unet import UNet
-from lora import inject_lora
+from data import MNIST
+from torch.utils.data import DataLoader
+from add_noise import *
+from lora import *
 
 EPOCH=20
 BATCH_SIZE=100
