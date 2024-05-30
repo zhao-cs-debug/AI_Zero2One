@@ -1,0 +1,2575 @@
+这是Diffusers库教程文档的其一文章，请你帮我总结下面的重点内容，并且使用中文和进行详细讲解。最好能采用总分总的结构：第一个“总”是用于提出文章的中心思想或主要论点，文章的中心思想需要吸引观众往下读，第二个“分”是分层叙述，对内容进行分要点详细讲解，第三个“总”是用于总结和概括文章的主要论点和分论点。
+
+
+Tutorials
+
+Understanding pipelines, models and schedulers
+总：
+本文是Diffusers库教程文档的一部分，主要介绍了如何使用模型和调度器来组装一个扩散系统进行推理。文章首先以一个基本的管道为例，然后逐步过渡到更复杂的Stable Diffusion管道，展示了如何解构管道并使用模型和调度器单独创建新的扩散系统。
+分：
+1.解构基本管道：
+管道包含一个UNet2DModel模型和一个DDPMScheduler调度器。
+通过载入模型和调度器，设置时间步数，创建随机噪声，编写去噪循环来重现管道的功能。
+在每个时间步，模型预测噪声残差，调度器使用它来预测较少噪声的图像，直到达到指定的推理步数。
+2.解构Stable Diffusion管道：
+Stable Diffusion是一个文本到图像的潜在扩散模型，包含编码器、解码器、分词器和文本编码器等组件。
+使用from_pretrained()方法加载所有组件，并将模型移动到GPU上以加快推理速度。
+对文本进行分词并生成嵌入，作为UNet模型的条件。
+创建初始随机噪声作为扩散过程的起点，并使用调度器的init_noise_sigma对其进行缩放。
+编写去噪循环，在每个时间步调用UNet模型预测噪声残差，并将其传递给调度器以计算先前的噪声样本。
+使用VAE解码器将潜在表示解码为图像。
+3.自定义扩散系统：
+Diffusers旨在使编写自己的扩散系统变得直观和简单。
+核心是去噪循环，设置调度器的时间步，迭代并在调用UNet模型预测噪声残差和将其传递给调度器之间交替。
+鼓励读者探索现有的管道，尝试从头开始使用模型和调度器构建管道。
+总：
+本文通过解构基本管道和Stable Diffusion管道，展示了如何使用Diffusers库提供的模型和调度器来组装自定义的扩散系统。文章强调了去噪循环的重要性，它是所有扩散系统的核心。通过设置时间步、迭代并在模型预测和调度器更新之间交替，我们可以实现各种扩散系统。Diffusers库的设计目的是让这个过程变得直观和简单，鼓励用户探索和创建自己的扩散系统。
+
+AutoPipeline
+总:
+本文主要介绍了🤗 Diffusers库中的AutoPipeline类,旨在简化各种管道的使用,让用户能够更加专注于任务本身。AutoPipeline可以自动检测并加载适用于特定任务的管道类,使得在不了解具体管道类名称的情况下,也能轻松加载检查点。
+分:
+1.AutoPipeline支持的任务
+目前,AutoPipeline支持文本到图像(text-to-image)、图像到图像(image-to-image)以及修复(inpainting)等任务。用户可以根据需要选择相应的AutoPipeline子类,如AutoPipelineForText2Image、AutoPipelineForImage2Image和AutoPipelineForInpainting。
+2.AutoPipeline的工作原理
+以文本到图像任务为例,当使用AutoPipelineForText2Image加载如"runwayml/stable-diffusion-v1-5"这样的检查点时,它会自动从model_index.json文件中检测到"stable-diffusion"类,并根据该类名加载相应的StableDiffusionPipeline。类似地,对于图像到图像和修复任务,AutoPipeline会分别加载StableDiffusionImg2ImgPipeline和StableDiffusionInpaintPipeline。
+3.使用AutoPipeline加载不同任务的示例
+文章给出了使用AutoPipeline进行文本到图像、图像到图像以及修复任务的示例代码。这些示例展示了如何使用AutoPipeline加载预训练权重,并传递特定于管道类的额外参数,如strength(决定添加到输入图像中的噪声或变化量)。
+4.使用from_pipe()方法实现多个管道的高效加载
+在某些工作流程中,或者需要加载多个管道时,重复加载相同的组件会消耗额外的内存。此时,可以使用from_pipe()方法从先前加载的管道的组件创建新管道,而无需额外的内存开销。from_pipe()方法能够检测原始管道类,并将其映射到与目标任务相对应的新管道类。
+总:
+AutoPipeline类是🤗 Diffusers库中一个强大的工具,它简化了各种任务的管道使用,使用户能够更加专注于任务本身。通过自动检测并加载适用于特定任务的管道类,AutoPipeline使得加载检查点变得更加容易。同时,from_pipe()方法提供了一种高效的方式,可以从先前加载的管道组件创建新管道,节省内存开销。了解并运用AutoPipeline,可以让开发者在使用🤗 Diffusers库时更加得心应手。
+
+Train a diffusion model
+总:本文是一篇关于如何使用Diffusers库训练扩散模型进行无条件图像生成的教程。文章主要介绍了如何从头开始训练一个UNet2DModel模型,以在Smithsonian Butterflies数据集的子集上生成蝴蝶图像。
+分:
+1.训练准备:
+安装必要的库,如Diffusers、Datasets和Accelerate。
+登录Hugging Face账户,以便在训练完成后与社区分享模型。
+设置训练配置,包括图像大小、批量大小、训练轮数等超参数。
+2.加载和预处理数据集:
+使用Datasets库加载Smithsonian Butterflies数据集。
+对图像进行预处理,包括调整大小、随机水平翻转和归一化。
+将预处理后的数据集包装在DataLoader中,以便在训练期间进行批量加载。
+3.创建UNet2DModel:
+使用Diffusers库中的UNet2DModel类创建模型。
+指定模型的输入和输出通道数、每个UNet块的ResNet层数以及下采样和上采样块的类型。
+4.创建调度器:
+使用DDPMScheduler为训练过程添加噪声。
+在训练期间,调度器根据噪声时间表和更新规则对图像应用噪声。
+5.训练模型:
+设置优化器和学习率调度器。
+定义评估函数,用于在训练过程中生成样本图像并保存为网格。
+使用Accelerate库创建训练循环,以方便进行TensorBoard日志记录、梯度累积和混合精度训练。
+在训练过程中,定期保存模型检查点和生成的样本图像。
+6.启动训练:
+使用Accelerate的notebook_launcher函数启动训练。
+指定训练循环函数、训练参数和要使用的进程数。
+总:通过本教程,读者可以学习如何使用Diffusers库从头开始训练一个扩散模型,用于无条件图像生成任务。文章详细介绍了训练准备、数据加载和预处理、模型创建、调度器设置以及训练过程的各个步骤。读者可以根据自己的需求调整训练配置,并在完成训练后将模型分享给社区。此外,文章还提供了一些后续步骤的建议,如探索其他任务和训练技术,如Textual Inversion、DreamBooth和使用LoRA进行微调等。
+
+Inference with PEFT
+总:
+本文主要介绍了如何在Diffusers库中使用LoRA（Lora-based Adapter）技术对Stable Diffusion XL (SDXL)模型进行推理。文章详细讲解了如何加载单个或多个LoRA适配器，并结合它们生成独特的图像。此外，文章还介绍了如何监控活动的适配器，以及如何将适配器融合到模型中以提高推理速度和降低显存使用。
+分:
+1.加载单个LoRA适配器
+使用load_lora_weights()方法加载LoRA适配器，并为其指定一个adapter_name。
+使用set_adapters()方法激活所需的适配器。
+在推理过程中，使用cross_attention_kwargs参数设置LoRA的缩放比例。
+2.组合多个LoRA适配器
+可以使用set_adapters()方法同时激活多个LoRA适配器，并指定它们的组合权重。
+在生成图像时，确保输入的文本提示中包含相应LoRA适配器的触发词。
+通过组合多个适配器，可以生成具有混合特征的独特图像。
+3.监控活动的适配器
+使用get_active_adapters()方法获取当前活动的适配器列表。
+使用get_list_adapters()方法获取每个管道组件的活动适配器列表。
+4.将适配器融合到模型中
+使用fuse_lora()方法将多个适配器直接融合到模型权重中（包括UNet和文本编码器）。
+融合适配器可以提高推理速度并降低显存使用。
+使用unfuse_lora()方法可以将UNet恢复到原始状态。
+可以使用adapter_names参数选择性地融合特定的适配器，以实现更快的生成。
+5.保存融合了适配器的管道
+为了正确保存加载了适配器的管道，需要按照以下步骤进行序列化：
+	使用fuse_lora()方法融合适配器，并设置lora_scale参数。
+	使用unload_lora_weights()方法卸载LoRA权重。
+	使用save_pretrained()方法保存管道到指定路径。
+总:
+通过使用Diffusers库提供的LoRA功能，用户可以轻松地为SDXL模型加载和管理适配器，以生成具有特定风格或效果的图像。文章详细介绍了如何加载单个或多个适配器，并结合它们进行推理。此外，文章还说明了如何监控活动的适配器，以及如何将适配器融合到模型中以优化推理性能。最后，文章提供了正确保存加载了适配器的管道的步骤，以便用户可以方便地复用和分享他们的工作。
+
+Accelerate inference of text-to-image diffusion models
+总:
+本文主要介绍了如何使用PyTorch 2中的优化技术来加速文本到图像扩散模型的推理过程。通过逐步应用这些优化技术，可以将稳定扩散XL (SDXL)管道的推理延迟最高提高3倍。文章强调，尽管示例中使用了SDXL管道，但这些技术也适用于其他文本到图像的扩散管道。
+分:
+1.基准测试
+加载全精度的管道，并将其模型组件放置在CUDA上。
+在没有SDPA（scaled_dot_product_attention）的情况下运行注意力操作。
+默认设置下，推理时间为7.36秒。
+2.使用bfloat16精度
+使用降低的数值精度（如float16或bfloat16）进行推理，不会影响生成质量，但可以显著提高延迟。
+现代GPU倾向于使用bfloat16，与float16相比，bfloat16在量化时更具弹性。
+使用bfloat16将延迟从7.36秒降低到4.63秒。
+3.使用SDPA
+注意力块的运行非常耗时，但使用PyTorch的scaled_dot_product_attention函数可以提高效率。
+Diffusers默认使用此函数，无需修改代码。
+使用SDPA将延迟从4.63秒提高到3.31秒。
+4.使用torch.compile
+PyTorch 2包括torch.compile，它使用快速优化的内核。
+通常编译UNet和VAE，因为它们是计算最密集的模块。
+使用"max-autotune"模式和inductor后端以获得最大推理速度。
+使用SDPA注意力并编译UNet和VAE，将延迟从3.31秒降低到2.54秒。
+5.防止图形中断
+指定fullgraph=True以确保在使用torch.compile时，底层模型中没有图形中断。
+这意味着要更改访问UNet和VAE返回变量的方式。
+6.编译后移除GPU同步
+在迭代反向扩散过程中，每次去噪器预测噪声较小的潜在嵌入时，都会在调度器上调用step()函数。
+在GPU上索引sigmas变量会导致CPU和GPU之间的通信同步，引入延迟。
+如果sigmas数组始终保留在CPU上，则不会发生CPU和GPU同步，不会产生任何延迟。
+7.组合注意力块的投影矩阵
+SDXL中的UNet和VAE使用类似Transformer的块，包括注意力块和前馈块。
+在注意力块中，输入使用三个不同的投影矩阵（Q、K和V）投影到三个子空间。
+可以将投影矩阵水平组合成单个矩阵，并在一个步骤中执行投影，以提高量化的影响。
+组合投影矩阵将延迟从2.54秒略微提高到2.52秒。
+8.动态量化
+使用PyTorch量化库torchao对UNet和VAE应用动态int8量化。
+量化为模型添加了额外的转换开销，但有望通过更快的矩阵乘法来弥补。
+过滤出不受动态int8量化影响的某些线性层。
+将适当的逐点卷积层转换为线性层，以最大限度地发挥动态量化的优势。
+应用动态量化将延迟从2.52秒提高到2.43秒。
+总:
+通过逐步应用PyTorch 2中的优化技术，如使用bfloat16精度、SDPA注意力函数、torch.compile、防止图形中断、移除GPU同步、组合注意力块的投影矩阵以及动态量化，可以显著加速文本到图像扩散模型的推理过程。文章详细介绍了每种优化技术的实现方法和效果，并强调了这些技术不仅适用于SDXL管道，也适用于其他文本到图像的扩散管道。通过综合应用这些优化技术，SDXL管道的推理延迟从初始的7.36秒降低到了2.43秒，提高了约3倍。
+
+
+Using diffusers
+loading&hub
+Load pipelines, models, and schedulers
+总:
+本文主要介绍了如何使用Diffusers库加载用于推理或训练的管道、模型和调度器。文章强调,DiffusionPipeline类是加载最新流行扩散模型的最简单、最通用的方法。此外,文章还详细解释了DiffusionPipeline的工作原理,以及如何自定义管道的默认组件。
+分:
+1.加载DiffusionPipeline
+使用DiffusionPipeline.from_pretrained()方法可以自动检测模型的正确管道类,下载并缓存所有必需的配置和权重文件,并返回一个可用于推理的管道实例。
+也可以使用特定任务的管道类(如StableDiffusionPipeline)直接加载模型。
+要在本地加载扩散管道,需要使用git-lfs手动下载模型,并将本地路径传递给from_pretrained()方法。
+2.在管道中替换组件
+可以使用另一个兼容组件自定义任何管道的默认组件。
+可以使用compatibles方法查找兼容的调度器。
+使用SchedulerMixin.from_pretrained()方法替换默认调度器,并将新的调度器实例传递给DiffusionPipeline的scheduler参数。
+可以通过将safety_checker参数设置为None来禁用安全检查器。
+3.跨管道重用组件
+使用components方法保存组件,以便在多个管道中重复使用,避免两次将权重加载到RAM中。
+也可以单独将组件传递给管道,以便更灵活地重用或禁用某些组件。
+4.检查点变体
+检查点变体通常是存储在不同浮点类型(如torch.float16)或非指数移动平均(EMA)权重的检查点。
+使用torch_dtype参数定义加载的检查点的浮点精度。
+使用variant参数定义应该从存储库中加载哪些文件。
+使用DiffusionPipeline.save_pretrained()方法保存不同浮点类型或非EMA变体的检查点。
+5.加载模型和调度器
+使用ModelMixin.from_pretrained()方法加载模型,该方法会下载并缓存最新版本的模型权重和配置。
+可以使用subfolder参数从子文件夹加载模型。
+使用SchedulerMixin.from_pretrained()方法加载调度器,调度器由配置文件定义,不同的调度器可以使用相同的配置文件。
+6.DiffusionPipeline详解
+DiffusionPipeline.from_pretrained()方法负责下载推理所需的最新文件夹结构并进行缓存,以及将缓存的权重加载到正确的管道类中。
+管道的底层文件夹结构直接对应于其类实例。
+每个管道都需要一个model_index.json文件,该文件包含有关要加载的管道类、使用的Diffusers版本以及存储在子文件夹中的组件的信息。
+总:
+本文详细介绍了如何使用Diffusers库加载和自定义扩散管道、模型和调度器。DiffusionPipeline类提供了一种简单、灵活的方式来加载最新的扩散模型,并支持自定义管道的默认组件以满足特定需求。此外,文章还阐述了如何跨管道重用组件、处理检查点变体以及单独加载模型和调度器。最后,文章深入解释了DiffusionPipeline的工作原理,包括其文件夹结构和model_index.json文件的作用。通过理解这些概念,用户可以更好地利用Diffusers库进行推理和训练。
+
+Load and compare different schedulers
+总:
+本文主要介绍了在使用Diffusers库进行扩散模型推理时,如何更换和比较不同的Scheduler(调度器)。文章强调,选择合适的Scheduler可以在推理速度和生成质量之间取得平衡,不同的Scheduler在不同场景下各有优劣,需要根据实际情况进行尝试和比较。
+分:
+1.Scheduler的作用:
+Scheduler定义了整个去噪过程,包括去噪步数、是否采用随机方法、以及寻找去噪样本的算法等。不同的Scheduler在去噪速度和质量之间有不同的权衡。
+2.访问和更换Pipeline的Scheduler:
+通过pipeline.scheduler属性可以访问当前Pipeline的Scheduler。可以通过scheduler.compatibles属性查看兼容的Scheduler列表,并通过scheduler.config属性获取当前Scheduler的配置。使用XXXScheduler.from_config(pipeline.scheduler.config)可以将Pipeline的Scheduler更换为其他兼容的Scheduler。
+3.比较不同Scheduler的性能:
+文章以stable-diffusion-v1-5模型为例,生成了相同prompt的图片,比较了PNDMScheduler、DDIMScheduler、LMSDiscreteScheduler、EulerDiscreteScheduler、EulerAncestralDiscreteScheduler和DPMSolverMultistepScheduler的效果。结果表明,大多数生成的图片质量相似,但不同Scheduler所需的推理步数不同,如EulerDiscreteScheduler和EulerAncestralDiscreteScheduler只需30步,DPMSolverMultistepScheduler只需20步即可生成高质量图片。
+4.在Flax中更换Scheduler:
+对于使用Flax后端的用户,文章也给出了更换Scheduler的完整示例代码。但需要注意,目前FlaxLMSDiscreteScheduler和FlaxDDPMScheduler尚不兼容FlaxStableDiffusionPipeline。
+总:
+综上所述,Diffusers库提供了多种Scheduler供用户选择,以在推理速度和生成质量之间取得平衡。用户可以根据实际需求,通过更换Scheduler和调整推理步数,来优化扩散模型的推理性能。在实践中,建议对不同的Scheduler进行比较和尝试,以找到最适合特定场景的方案。
+
+Load community pipelines and components
+总：本文主要介绍了如何在Diffusers库中加载社区管道（Community pipelines）和社区组件（Community components），以便扩展和自定义Diffusers库的功能。
+分：
+1.社区管道：
+社区管道是指与原始论文实现不同的DiffusionPipeline类，提供额外的功能或扩展原始管道的实现。
+可以在Hugging Face Hub上找到官方的社区管道。
+加载社区管道时，需要将社区管道的仓库ID传递给custom_pipeline参数，并指定加载管道权重和组件的模型仓库。
+加载官方社区管道与加载普通管道类似，但可以混合加载官方仓库ID的权重和直接传递管道组件。
+2.社区组件：
+社区组件允许用户构建包含Diffusers未支持的自定义组件的管道。
+自定义组件可以是VAE、UNet和调度器等，通常从Transformers库中导入文本编码器。
+加载社区组件的步骤：
+从Transformers导入并加载文本编码器。
+加载调度器。
+加载图像处理器。
+加载自定义UNet（需要在单独的Python脚本中实现）。
+加载自定义管道代码（需要在单独的Python脚本中实现）。
+使用自定义UNet和管道代码初始化管道。
+将管道推送到Hugging Face Hub与社区分享。
+3.推理和使用：
+在初始化管道时添加trust_remote_code参数，以处理幕后的"魔法"。
+使用encode_prompt方法生成文本嵌入。
+调用管道进行推理，生成视频帧或图像。
+总：通过加载社区管道和社区组件，用户可以扩展和自定义Diffusers库的功能，构建包含自定义组件的管道。这种灵活性使得用户能够探索和创建新的应用，并与社区分享他们的创新成果。在使用社区管道和组件时，需要注意加载可信的代码，并正确地组织和实现自定义组件和管道代码。
+
+Load safetensors
+总:
+safetensors是一种安全且快速的张量存储和加载文件格式。与Python的pickle工具序列化的.bin文件相比,safetensors格式更加安全,非常适合用于共享模型权重文件。本文主要介绍了如何在Diffusers库中加载safetensors格式的权重文件,以及如何将其他格式的权重转换为safetensors格式。
+分:
+1.加载safetensors格式的权重文件
+如果模型仓库中的text_encoder、unet和vae子文件夹内已经包含了safetensors格式的权重文件,Diffusers库会默认自动加载它们。你也可以通过设置use_safetensors=True参数来显式指定加载safetensors格式的权重。
+有时候,所有权重都存储在一个单独的.safetensors文件中。如果这些权重是Stable Diffusion的权重,你可以直接使用StableDiffusionPipeline类的from_single_file()方法来加载这个文件。
+2.将其他格式的权重转换为safetensors格式
+如果模型仓库中只有.bin格式的权重文件,你可以使用Hugging Face上的Convert Space将其转换为safetensors格式。Convert Space会下载.bin权重文件并将其转换为safetensors格式,然后在Hugging Face Hub上提交一个Pull Request来上传新的safetensors权重文件。这样可以避免你的计算机直接下载和执行可能包含恶意代码的.bin文件。
+你可以通过在加载模型时指定revision参数为对应Pull Request的引用(如refs/pr/22)来使用转换后的safetensors权重文件。
+3.使用safetensors的优势
+使用safetensors格式有以下几个优势:
+安全性:随着开源和模型分发的发展,能够信任下载的模型权重不包含恶意代码非常重要。safetensors格式的文件头大小限制可以防止解析非常大的JSON文件。
+加载速度:在切换模型时,safetensors格式可以实现张量的零拷贝,加载速度非常快。特别是在将权重加载到CPU上时,相比pickle格式有明显的性能优势。
+懒加载:safetensors格式支持张量的懒加载,在分布式环境中可以只加载部分张量。这使得在8个GPU上加载BLOOM模型的时间从使用常规PyTorch权重的10分钟缩短到了45秒。
+总:
+总的来说,本文介绍了在Diffusers库中加载safetensors格式的模型权重文件的方法,以及如何将其他格式的权重转换为safetensors格式。与pickle等其他格式相比,safetensors格式具有更高的安全性和更快的加载速度等优势。在开源模型分发和使用日益广泛的背景下,safetensors有望成为存储和共享模型权重的标准格式。
+
+Load different Stable Diffusion formats
+总:
+这篇教程主要介绍了如何将不同格式的Stable Diffusion模型转换为与🤗 Diffusers兼容的格式。Diffusers是一个功能强大的扩散模型库,支持不同的推理调度器、自定义pipeline以及各种优化推理速度的技术和方法。将模型转换为Diffusers格式可以充分利用这些特性。
+分:
+1.PyTorch .ckpt格式
+.ckpt格式通常用于存储和保存模型,文件包含整个模型且体积较大。
+虽然可以直接使用from_single_file()方法加载.ckpt文件,但最好将其转换为Diffusers格式。
+转换方法有两种:使用SD to Diffusers Space或使用转换脚本。
+使用Space转换适用于基本模型,但可能难以处理更加定制化的模型;使用脚本转换更可靠。
+转换脚本需要配置几个重要的输入参数,如checkpoint_path、original_config_file和dump_path等。
+2.Keras .pb或.h5格式
+KerasCV支持训练Stable Diffusion v1和v2,但在推理和部署方面支持有限,而Diffusers具有更完整的特性集。
+Convert KerasCV Space可将.pb或.h5文件转换为PyTorch格式,并包装在StableDiffusionPipeline中以便进行推理。
+转换后的checkpoint存储在Hugging Face Hub的仓库中。
+可以在Space中输入相关路径和参数,点击Submit按钮即可自动转换。
+转换成功后,Space会生成一个模型卡片,其中包含推理widget和代码片段,方便测试和使用。
+3.A1111 LoRA文件
+Automatic1111(A1111)是一个流行的Stable Diffusion网页UI,支持Civitai等模型共享平台。
+使用LoRA(Low-Rank Adaptation)技术训练的模型尤其受欢迎,因为训练速度快且文件更小。
+Diffusers支持使用load_lora_weights()方法加载A1111 LoRA checkpoint。
+从Civitai下载LoRA checkpoint后,使用load_lora_weights()方法将其加载到pipeline中即可生成图像。
+总:
+通过将不同格式的Stable Diffusion模型转换为与Diffusers兼容的格式,我们可以利用该库提供的各种功能和优化技术。文章详细介绍了如何转换PyTorch .ckpt、Keras .pb/.h5以及A1111 LoRA等常见的模型格式,提供了使用Space和脚本两种转换方法,并给出了相关的代码示例。掌握这些转换方法,就能够更加灵活地使用和部署Stable Diffusion模型。
+
+Load adapters
+总结:
+本文主要介绍了如何在Diffusers库中加载不同类型的适配器(Adapter),包括DreamBooth、Textual Inversion、LoRA、IP-Adapter等,这些适配器可以实现对扩散模型的个性化定制,生成特定主题或风格的图像。
+分要点详解:
+1.DreamBooth通过在几张主题图像上微调整个扩散模型,可以生成该主题的新风格图像。加载DreamBooth的权重文件即可使用。
+2.Textual Inversion通过训练新的文本嵌入向量来表示几张图像所提供的概念,扩散模型的其他部分保持不变。需要先加载一个基础模型,然后用load_textual_inversion()方法加载嵌入向量。Textual Inversion还可以训练负面嵌入来防止模型生成模糊、手指过多等缺陷。
+3.LoRA通过在扩散模型中插入新的权重并只训练这些新权重来快速适应新风格,训练速度快,生成的文件较小。使用load_lora_weights()方法即可加载LoRA权重。还可以用fuse_lora()方法将多个LoRA权重融合到基础模型中。
+4.IP-Adapter通过解耦图像和文本特征的cross-attention层,只训练UNet中嵌入的图像特征,从而以较小的开销实现图像模型个性化,适用于多种扩散模型。使用load_ip_adapter()方法加载IP-Adapter权重,支持同时使用图像+文本prompt。
+5.IP-Adapter可以和LCM-Lora等方法结合,实现"即时微调"。还可以使用多个adapter同时对图像和人脸等不同层面进行风格化。
+6.IP-Adapter已支持Stable Diffusion、SDXL、ControlNet、T2I-Adapter、AnimateDiff等管线和自定义模型。
+总结:
+通过加载不同类型的适配器,Diffusers库为用户提供了多样化的个性化扩散模型定制方案。DreamBooth可微调整个模型,Textual Inversion可训练嵌入,LoRA可快速插入可训练权重,IP-Adapter则通过解耦实现轻量化图像风格化。用户可以根据需求灵活选择和组合不同的适配器,以较小开销实现令人印象深刻的图像生成效果。Diffusers库强大的适配器生态大大降低了扩散模型应用的门槛。
+
+Push files to the Hub
+总:
+本文是Diffusers库的教程文档之一,主要介绍了如何使用PushToHubMixin将模型、调度器或管道上传到Hugging Face Hub。通过将文件存储在Hub上,不仅方便自己保存和重用,还可以与他人分享自己的工作成果。
+分:
+1.登录Hugging Face Hub账号
+在开始上传文件之前,需要先使用访问令牌登录到你的Hub账号。
+2.上传模型
+调用模型实例的push_to_hub()方法,指定要存储在Hub上的仓库ID,即可将模型上传至Hub。还可以通过variant参数指定要上传的权重变体,如fp16。
+push_to_hub()函数会保存模型的config.json文件,权重会自动以safetensors格式保存。
+上传完成后,可以通过from_pretrained()方法从Hub上重新加载模型。
+3.上传调度器
+与上传模型类似,调用调度器实例的push_to_hub()方法并指定仓库ID,即可将调度器上传至Hub。
+push_to_hub()函数会将调度器的scheduler_config.json文件保存到指定的仓库中。
+上传完成后,可以通过from_pretrained()方法从Hub上重新加载调度器。
+4.上传管道
+可以将整个管道及其所有组件一起上传到Hub。
+首先用所需参数初始化管道的各个组件(如UNet2DConditionModel,AutoencoderKL等),然后将这些组件传递给管道类(如StableDiffusionPipeline),最后调用管道实例的push_to_hub()方法上传管道。
+push_to_hub()函数会将每个组件保存到仓库中的子文件夹中。
+上传完成后,可以通过from_pretrained()方法从Hub上重新加载整个管道。
+5.隐私设置
+在push_to_hub()函数中设置private=True,可以将模型、调度器或管道文件设为私有。
+私有仓库只对自己可见,其他用户无法克隆仓库,仓库也不会出现在搜索结果中。即使其他用户知道私有仓库的URL,也会收到404错误。要从私有仓库加载模型,必须先登录账号。
+总:
+总的来说,本文详细讲解了如何利用Diffusers库提供的PushToHubMixin,将模型、调度器和管道上传到Hugging Face Hub进行存储和分享的完整过程。通过将文件上传到Hub,不仅可以方便地备份和重用自己的工作成果,还能让更多人benefit from你的模型。同时,Diffusers库还提供了隐私设置,可以将敏感模型设为私有,确保它们不会被他人滥用。Diffusers库的这一功能大大促进了AI模型的开放性和可复用性。
+
+
+Tasks
+Unconditional image generation
+总:
+这篇文章介绍了如何使用Diffusers库中的DiffusionPipeline进行无条件图像生成。无条件图像生成是指生成的图像看起来像是从模型训练数据中随机采样得到的,因为去噪过程不受任何额外上下文(如文本或图像)的指导。
+分:
+1.加载预训练模型:
+使用DiffusionPipeline加载"anton-l/ddpm-butterflies-128"检查点,以生成蝴蝶图像。DiffusionPipeline会下载并缓存生成图像所需的所有模型组件。
+2.生成图像:
+调用加载的生成器(generator)对象,生成的图像存储在generator().images[0]中。生成的图像是一个PIL.Image对象,可以直接保存。
+3.自定义生成过程:
+如果想生成其他内容的图像,可以参考训练指南,了解如何训练模型来生成自己的图像。此外,还可以通过调整num_inference_steps参数来控制去噪步数,更多的去噪步骤通常会生成质量更高的图像,但生成时间会更长。建议多尝试调整该参数,观察其对图像质量的影响。
+总:
+通过使用Diffusers库提供的DiffusionPipeline,可以方便地加载预训练模型,并生成高质量的无条件图像。生成过程可以通过调整去噪步数等参数进行自定义,以满足不同的需求。如果想生成特定内容的图像,也可以参考训练指南,训练自己的模型。
+
+Text-to-image
+总:
+这篇文章介绍了如何使用Diffusers库实现文本到图像的生成。文本到图像是指根据文本描述(提示)生成相应的图像。文章详细介绍了几种流行的文本到图像模型,以及如何配置管道参数和控制图像生成过程,最后还提供了一些优化技巧以提高生成效率。
+分:
+1.文本到图像的基本原理:
+扩散模型接收一个提示和随机初始噪声,通过迭代去除噪声来构建图像。去噪过程由提示引导,在预定的时间步骤结束后,图像表示被解码为最终图像。
+2.流行的文本到图像模型:
+文章介绍了Stable Diffusion v1.5、Stable Diffusion XL (SDXL)、Kandinsky 2.2和ControlNet等几种流行的文本到图像模型。它们在架构和训练过程上略有不同,但使用方法大同小异。
+3.配置管道参数:
+可以通过配置管道的参数来影响图像生成,例如改变图像的输出尺寸、指定负提示以提高图像质量等。文章详细介绍了如何使用height、width、guidance_scale、negative_prompt和generator等参数。
+4.控制图像生成:
+除了配置管道参数外,还有其他方法可以更好地控制图像生成,如提示加权和使用ControlNet模型。提示加权可以增加或减少提示中概念的重要性,从而强调或最小化图像中的某些特征。ControlNet模型可以结合额外的条件输入图像来生成更精确的图像。
+5.优化:
+扩散模型通常很大,生成图像的迭代去噪过程计算成本高、资源密集。文章提供了一些优化技巧,如以半精度加载模型权重、将整个模型卸载到GPU以节省内存等。使用PyTorch 2.0的scaled dot product attention和torch.compile也可以进一步提高代码速度。
+总:
+Diffusers库提供了强大的工具来实现文本到图像的生成。通过选择合适的模型、配置管道参数和使用控制技术,可以生成高质量、符合要求的图像。为了提高生成效率,还可以采用各种优化技巧。总之,Diffusers库使得文本到图像的生成变得更加简单和灵活。
+
+Image-to-image
+总:
+这篇文章全面介绍了如何使用Diffusers库实现图像到图像(image-to-image)的生成。与文本到图像生成类似,图像到图像生成除了需要一个提示外,还需要一个初始图像作为扩散过程的起点。文章详细讲解了几种流行的图像到图像模型,如何配置管道参数,以及控制图像生成的方法,最后还提供了一些优化技巧以提高生成效率。
+分:
+1.图像到图像生成的基本原理:
+初始图像被编码到潜在空间并添加噪声。然后,潜在扩散模型接收一个提示和噪声潜在图像,预测添加的噪声并从初始潜在图像中去除预测的噪声,得到新的潜在图像。最后,解码器将新的潜在图像解码回图像。
+2.流行的图像到图像模型:
+文章介绍了Stable Diffusion v1.5、Stable Diffusion XL (SDXL)和Kandinsky 2.2等几种流行的图像到图像模型。它们在架构和训练过程上略有不同,但使用方法大同小异。SDXL通常能生成比Stable Diffusion v1.5更高质量的图像。
+3.配置管道参数:
+可以通过配置管道的参数来影响图像生成过程和图像质量,如strength、guidance_scale和negative_prompt等。strength决定生成图像与初始图像的相似程度,guidance_scale控制生成图像与文本提示的对齐程度,negative_prompt可以改善图像质量或修改图像内容。
+4.链式图像到图像管道:
+可以将图像到图像管道与其他管道链接,实现更有趣的图像生成,如文本到图像到图像、图像到图像到图像,以及图像到上采样到超分辨率等。这对于迭代执行图像风格转换、生成短视频、恢复图像色彩或修复图像缺失区域等任务非常有用。
+5.控制图像生成:
+除了使用negative_prompt部分控制图像生成外,还有更强大的方法,如提示加权和ControlNets。提示加权允许缩放提示中每个概念的表示,而ControlNets可以使用附加的条件图像(如深度图)来更灵活、准确地控制图像生成。
+6.优化:
+运行扩散模型的计算成本高、资源密集,但通过一些优化技巧,完全可以在消费级和免费GPU上运行。例如,使用更节省内存的注意力机制(如PyTorch 2.0的scaled-dot product attention或xFormers),将模型卸载到GPU,而其他管道组件则等待在CPU上。使用torch.compile包装UNet也可以进一步提高推理速度。
+总:
+Diffusers库提供了强大的工具来实现图像到图像的生成。通过选择合适的模型、配置管道参数和使用控制技术,可以生成高质量、符合要求的图像。将图像到图像管道与其他管道链接可以实现更多有趣的图像生成任务。为了提高生成效率,还可以采用各种优化技巧。总之,Diffusers库使得图像到图像的生成变得更加简单和灵活。
+
+Inpainting
+总:使用Diffusers库的Inpainting技术可以方便地对图像的特定区域进行编辑和修改,创作出令人惊艳的效果。
+分:
+1.Inpainting的基本原理是使用一个掩码来定义需要填充的图像区域,掩码中白色像素代表需要inpainting的区域,黑色像素代表保持不变的区域。使用Diffusers库可以轻松加载Inpainting模型,并传入图像、掩码和文字提示进行Inpainting操作。
+2.Stable Diffusion、Stable Diffusion XL和Kandinsky 2.2是目前最流行的用于Inpainting的模型。通过比较,可以看出Stable Diffusion XL和Kandinsky 2.2生成的图像质量更高,细节更丰富。而普通的Stable Diffusion 1.5等非inpainting专用模型进行inpainting时,效果可能不如专用模型理想。
+3.可以通过调整模型参数如strength、guidance_scale等来控制inpainting的效果。例如提高strength会使生成图像与原图差异更大,降低strength则更接近原图;提高guidance_scale会使生成图像更符合文字提示,降低则提示影响较小。
+4.除了常规的Inpainting pipeline,还可以将多个diffusion pipeline进行链接,实现更强大灵活的效果。如将text-to-image生成的图像用作inpainting的起始图像;将inpainting的结果再用image-to-image等其他pipeline进一步美化,从而得到最终理想的图像。
+5.要进一步控制AI生成的细节,可以使用prompt加权调整,通过增减各概念的权重系数来控制最终图像的偏好。另一个更强大的控制方式是使用ControlNet,它能够接受一个额外的条件控制图像,引导diffusion模型保留其特征。
+6.优化方面,启用内存高效attention如xformers,以及CPU内存卸载等技巧,可以显著提升Inpainting的速度和降低显存占用。对UNet等关键组件使用torch.compile也能进一步加速。
+总:综上所述,使用Diffusers库可以轻松实现高质量的图像Inpainting,并且提供了多种参数和技巧来精细控制AI生成的细节。通过pipeline组合、ControlNet等高级用法,创作空间更加广阔。采用一些优化措施后,即使在普通消费级显卡上也可以流畅运行Inpainting任务。Diffusers让每个人都可以发挥想象力,创造出独特的视觉奇迹。
+
+Depth-to-image
+总:这篇教程文章主要介绍了如何使用Diffusers库中的StableDiffusionDepth2ImgPipeline模型,通过提供文本提示、初始图像和深度图来生成新的图像。
+分:
+1.首先需要创建一个StableDiffusionDepth2ImgPipeline的实例,可以指定使用的硬件(如GPU)和数据类型。
+2.准备好输入数据,包括:
+文本提示(prompt):描述希望生成的图像内容
+初始图像(init_image):提供一张参考图片
+负面提示(negative_prompt):列出不希望出现的内容,避免生成质量差的图像
+深度图(depth_map):可选,用于保持图像结构,如果没提供,模型会自动预测
+3.调用pipeline,传入准备好的数据,可以设置图像生成的强度(strength)等参数。输出结果是一个图像列表。
+4.可以使用diffusers库提供的工具函数,如make_image_grid将生成的图像和初始图像拼接在一起,方便对比。
+总:本教程演示了使用StableDiffusionDepth2ImgPipeline生成图像的完整流程。这个模型的特点是可以利用文本提示和参考图像来控制生成图像的内容和风格,同时还可以使用深度图来保持图像的结构。使用负面提示可以避免生成一些不好的内容。整个过程只需要准备好输入数据,然后调用pipeline就可以生成想要的图像了。
+
+
+techniques
+Textual inversion
+总:
+这篇文章主要介绍了如何在Stable Diffusion模型中使用Textual Inversion(文本倒置)技术来实现自定义概念的图像生成。通过加载预先学习好的嵌入向量,可以让模型快速地学习新的概念,从而生成更加个性化和符合用户需求的图像。
+分:
+1.在Stable Diffusion 1和2中使用Textual Inversion:
+首先选择一个预训练的Stable Diffusion检查点和一个预学习的概念。
+加载StableDiffusionPipeline,并将预学习的概念传递给它。
+使用特殊占位符标记创建包含预学习概念的提示,并指定要生成的样本数和图像行数。
+运行pipeline,保存生成的图像并使用辅助函数进行可视化。
+2.在Stable Diffusion XL (SDXL)中使用Textual Inversion:
+SDXL有两个文本编码器,因此需要两个textual inversion嵌入向量,每个文本编码器模型对应一个。
+下载SDXL textual inversion嵌入向量,并查看其结构。它包含两个张量:"clip_g"和"clip_l",分别对应SDXL中的两个文本编码器。
+通过将每个张量与正确的文本编码器和分词器一起传递给load_textual_inversion()函数,可以分别加载每个张量。
+3.运行SDXL推理:
+加载AutoPipelineForText2Image管道。
+使用load_textual_inversion()函数加载预学习的嵌入向量。
+创建提示并运行pipeline生成图像,将预学习的嵌入向量用作负提示以控制生成的图像。
+总:
+Textual Inversion是一种强大的技术,可以通过少量样本图像让Stable Diffusion模型学习新的概念。这使得用户能够对生成的图像进行更多控制,并根据特定概念定制模型。通过使用Stable Diffusion Conceptualizer中预学习的概念,用户可以快速开始使用Textual Inversion进行推理,并生成高质量、个性化的图像。
+
+Distributed inference with multiple GPUs
+总:
+本文主要介绍了如何在多GPU环境下使用Diffusers库进行分布式推理。文章分别介绍了使用🤗 Accelerate和PyTorch Distributed两种方式实现分布式推理的步骤和代码示例。通过分布式推理，可以在多个GPU上并行生成多个提示，提高推理效率。
+分:
+1.使用🤗 Accelerate进行分布式推理
+创建一个Python文件，并初始化accelerate.PartialState以创建分布式环境。
+将DiffusionPipeline移动到distributed_state.device，为每个进程分配一个GPU。
+使用split_between_processes工具作为上下文管理器，自动在进程之间分配提示。
+使用--num_processes参数指定要使用的GPU数量，并调用accelerate launch来运行脚本。
+2.使用PyTorch Distributed进行分布式推理
+创建一个Python文件，导入torch.distributed和torch.multiprocessing以设置分布式进程组并在每个GPU上生成推理进程。
+初始化DiffusionPipeline。
+创建一个函数来运行推理，使用init_process_group处理创建分布式环境，包括要使用的后端类型、当前进程的等级以及参与的进程数(world_size)。
+将DiffusionPipeline移动到对应的rank，并使用get_rank为每个进程分配一个GPU，每个进程处理不同的提示。
+调用mp.spawn在world_size定义的GPU数量上运行run_inference函数。
+使用--nproc_per_node参数指定要使用的GPU数量，并调用torchrun来运行脚本。
+总:
+本文重点介绍了在多GPU环境下使用Diffusers库进行分布式推理的两种方法:🤗 Accelerate和PyTorch Distributed。通过详细的代码示例和步骤说明，读者可以了解如何设置分布式环境、将DiffusionPipeline分配给不同的GPU，以及在多个进程之间分配提示。使用分布式推理可以显著提高生成效率，尤其是在处理大量提示时。无论是使用🤗 Accelerate还是PyTorch Distributed，都可以帮助用户充分利用多GPU资源，加速推理过程。
+
+Improve image quality with deterministic generation
+总:
+本文介绍了如何使用 Diffusers 库中的 DiffusionPipeline 类和 torch.Generator 类来生成高质量的图像。文章的中心思想是通过确定性批量生成的方法来提高生成图像的质量,即先生成一批图像,然后选择一个图像,并在第二轮推理中使用更详细的提示来改进它。
+分:
+1.实例化 DiffusionPipeline 并将其放在 GPU 上(如果可用)。
+使用 DiffusionPipeline.from_pretrained() 方法实例化一个管道,并使用 .to("cuda") 将其放置在 GPU 上以加速推理过程。
+2.定义多个 torch.Generator 对象并为每个对象分配一个种子。
+创建一个长度为批量大小的列表,其中每个元素都是一个具有唯一种子的 torch.Generator 对象。这样可以确保每个图像都使用不同的随机种子生成。
+3.生成第一批图像并选择要改进的图像。
+使用 pipe() 方法生成一批图像,并使用 make_image_grid() 函数将其可视化。选择要改进的图像,记下其对应的种子。
+4.修改提示并重新生成选定的图像。
+向原始提示添加额外的文本以改进所选图像的质量。创建与批量大小相同数量的 Generator 对象,并为它们分配与所选图像相同的种子。使用修改后的提示重新生成图像。
+5.比较改进前后的图像质量。
+使用 make_image_grid() 函数并排可视化改进前后的图像,以评估质量的提高。
+总:
+本文介绍了一种使用 Diffusers 库提高生成图像质量的方法。通过使用确定性批量生成,我们可以从一批生成的图像中选择一个进行改进。为每个图像分配唯一的种子可以确保我们可以在第二轮推理中重现所选的图像。通过向提示添加额外的细节,我们可以生成更高质量和更具体的图像。这种方法可以帮助用户从初始生成的图像中获得理想的结果,并通过迭代改进来创建出色的图像。
+
+Control image brightness
+总:
+本文介绍了如何使用Diffusers库中的DDIMScheduler来改善Stable Diffusion生成的图像的亮度问题。文章指出,Stable Diffusion在生成非常明亮或黑暗的图像方面表现一般,而DDIMScheduler实现了一些改进方法来解决这个问题。
+分:
+1.使用v_prediction和v_loss训练模型
+根据"Common Diffusion Noise Schedules and Sample Steps are Flawed"论文中的建议,使用v_prediction和v_loss训练模型可以改善图像的亮度问题。在训练脚本中添加--prediction_type="v_prediction"标志以启用v_prediction。
+2.使用经过v_prediction微调的检查点
+文章以ptx0/pseudo-journey-v2检查点为例,该检查点已经使用v_prediction进行了微调,因此更适合解决亮度问题。
+3.配置DDIMScheduler的参数
+在DDIMScheduler中设置以下参数:
+	rescale_betas_zero_snr=True:将噪声计划重新缩放为零终端信噪比(SNR)。
+	timestep_spacing="trailing":从最后一个时间步开始采样。
+4.设置guidance_rescale以防止曝光过度
+在调用pipeline时,将guidance_rescale设置为一个合适的值(例如0.7),以防止生成的图像曝光过度。
+总:
+本文提供了一种使用DDIMScheduler改善Stable Diffusion生成图像亮度问题的方法。通过使用v_prediction和v_loss训练模型,选择经过微调的检查点,配置DDIMScheduler的参数,并设置适当的guidance_rescale值,我们可以生成亮度更加合适的图像。这些技巧有助于提高Stable Diffusion在处理极端亮度场景时的性能,从而生成更高质量的图像。
+
+Prompt weighting
+总:
+本文介绍了如何使用Compel库和Diffusers库来实现prompt weighting(提示词加权)、blending(混合)、conjunction(连接)等技术,以便更好地控制生成图像的效果。通过这些技术,我们可以强调或弱化提示词中的某些概念,从而生成更符合我们期望的图像。
+分:
+1.Prompt weighting(提示词加权)
+通过在提示词中使用+或-来增加或减少某个概念的权重,从而控制模型对该概念的关注程度。例如,"a red cat playing with a ball++"会增加"ball"的权重,使生成的图像中更加突出球的存在。
+2.Blending(混合)
+使用compel_proc().blend()方法,可以将多个提示词按照给定的权重进行混合,生成融合了不同概念的图像。这种方法打破了文本编码器的一些假设,可能产生意想不到的结果,需要多尝试和调整。
+3.Conjunction(连接)
+使用compel_proc().and()方法,可以将多个提示词独立地扩散,并将它们的结果按权重相加。这种方法可以更加灵活地组合不同的概念,生成更加复杂和多样的图像。
+4.Textual inversion(文本反转)
+通过使用预训练的概念嵌入,可以将特定的概念引入到图像生成中。使用DiffusersTextualInversionManager类可以简化带有文本反转的提示词加权过程。
+5.DreamBooth
+DreamBooth是一种根据少量训练图像生成特定主题图像的技术。与文本反转不同,DreamBooth训练整个模型,而不仅仅是文本嵌入。使用DreamBooth模型时,需要在提示词中加入模型特有的标识符。
+6.Stable Diffusion XL
+由于Stable Diffusion XL(SDXL)模型使用了两个分词器和文本编码器,在使用Compel库时需要同时传入这两个组件。此外,SDXL管道还需要pooled_prompt_embeds参数,因此在调用管道时需要传入conditioning和pooled两个参数。
+总:
+通过使用Compel库和Diffusers库提供的各种技术,如提示词加权、混合、连接、文本反转和DreamBooth,我们可以更加精细地控制图像生成过程,生成更加符合我们期望的图像。这些技术为探索和创作提供了更大的灵活性和可能性。同时,不同的模型(如Stable Diffusion XL)可能有其特定的使用方式,需要根据具体情况进行调整和适配。
+
+Improve generation quality with FreeU
+总:
+本文介绍了如何使用FreeU技术来提高使用Diffusers库进行图像和视频生成的质量。FreeU通过重新平衡UNet中跳跃连接和主干特征图的贡献来改善生成结果,且无需额外的训练。该技术适用于文本到图像、图像到图像以及文本到视频等不同任务。
+分:
+1.UNet的特点
+UNet在反向扩散过程中负责去噪,其架构有两个显著特点:
+	主干特征主要贡献于去噪过程
+	跳跃特征主要将高频特征引入解码器模块,但有时会引入不自然的图像细节
+2.FreeU技术
+FreeU通过重新平衡UNet中跳跃连接和主干特征图的贡献来提高图像质量。它在推理过程中应用,不需要额外的训练。
+3.在StableDiffusionPipeline中应用FreeU
+加载StableDiffusionPipeline后,使用enable_freeu()方法启用FreeU机制,并设置特定的超参数(如s1、s2、b1、b2)。这些超参数是主干和跳跃特征的缩放因子。可以通过调用disable_freeu()方法来禁用FreeU机制。
+4.在Stable Diffusion 2和Stable Diffusion XL中应用FreeU
+与StableDiffusionPipeline类似,在加载相应的管道后,使用enable_freeu()方法启用FreeU机制,并设置适当的超参数。不同的模型可能需要不同的最佳超参数设置。
+5.在文本到视频生成中应用FreeU
+FreeU也可以用于提高视频质量。加载TextToVideoSDPipeline后,使用enable_freeu()方法启用FreeU机制,并设置适当的超参数。然后进行推理并将生成的帧导出为视频。
+总:
+FreeU是一种用于提高使用Diffusers库进行图像和视频生成质量的技术。它通过重新平衡UNet中跳跃连接和主干特征图的贡献来改善生成结果,无需额外的训练。本文详细介绍了如何在StableDiffusionPipeline、Stable Diffusion 2、Stable Diffusion XL以及文本到视频生成中应用FreeU技术。通过设置适当的超参数,FreeU可以有效地提高生成质量,为不同的任务提供更好的结果。
+
+
+specific pipeline examples
+Stable Diffusion XL
+总的来说,SDXL是一个非常强大的文本到图像(text-to-image)生成模型。相比之前的Stable Diffusion模型,它在以下几个方面进行了改进和创新:
+1.模型规模和架构上的改进: UNet模型参数量增加3倍,同时融合了两个不同的文本编码器,大幅提升了模型容量和表达能力。
+2.引入尺寸和裁剪条件控制: 添加原图尺寸条件、目标尺寸条件和裁剪位置条件,让模型生成更贴近训练数据分布的高质量图像。
+3.采用两阶段生成流程: 包含一个基础(base)模型和一个精修(refiner)模型,先用base模型生成基础图像,再用refiner模型添加高质量细节。两个模型可以协同工作也可以分步使用。
+接下来详细介绍SDXL的使用方法:
+1.加载模型:
+可以用from_pretrained()方法加载存储在Hub不同子文件夹的模型。
+也可以用from_single_file()方法从单个文件(.ckpt或.safetensors)加载模型。
+2.各种图像生成任务:
+文本到图像(text-to-image): 直接给定文本提示生成图像。
+图像到图像(image-to-image): 以一张初始图像和文本提示为输入,生成相关的图像。
+局部编辑(inpainting): 输入图像、掩码和文本提示,只改变掩码区域生成新图像。
+3.使用refiner模型提升质量:
+将base模型和refiner模型作为专家组合(ensemble of expert denoisers),前者负责高噪声去噪,后者负责低噪声去噪,加速生成。
+也可先用base模型生成初步结果,再用refiner模型添加细节,类似图像到图像任务。
+4.微调节(micro-conditioning):
+可以用original_size、target_size、crop coordinates等参数,控制生成图像更贴近特定尺寸和构图。
+也可以用negative micro-conditioning参数,避免生成某些特征的图像。
+5.优化和加速:
+超大模型容易导致显存不足,可以将模型offload到CPU,用enable_model_cpu_offload()方法。
+开启torch.compile可获得约20%加速,需要PyTorch 2.0+版本。
+低于2.0版本可启用xFormers加速。
+总的来说,Stable Diffusion XL在保持原有出色生成效果的基础上,进一步提升了图像质量和可控性,为开发者和艺术家提供了更强大灵活的AI创作工具。通过合理使用micro-conditioning、refiner模型、加速优化等SDXL独有的功能特性,我们可以获得更高分辨率、更精细、更符合需求的惊艳图像。
+
+SDXL Turbo
+总览:
+本文介绍了如何使用Diffusers库和stabilityai/sdxl-turbo模型进行文本生成图像和图像生成图像。SDXL Turbo是一个经过对抗性时间蒸馏训练的Stable Diffusion XL模型,能够在极少的推理步骤内生成高质量图像。
+要点分析:
+1.加载模型检查点
+可以使用from_pretrained()方法从Hugging Face Hub或本地加载存储在不同子文件夹中的模型权重。也可以使用from_single_file()方法加载存储为单个文件格式(.ckpt或.safetensors)的模型检查点。
+2.文本生成图像
+传入文本提示,SDXL Turbo默认生成512x512分辨率的图像,该分辨率可获得最佳效果。可尝试设置height和width参数为768x768或1024x1024,但会降低图像质量。
+将guidance_scale设为0以禁用,因为模型在训练时没有使用。单次推理步骤足以生成高质量图像,增加步骤数到2、3或4可进一步提高图像质量。
+3.图像生成图像
+确保num_inference_steps * strength大于等于1。图像到图像管道将运行int(num_inference_steps * strength)个步骤。
+4.加速SDXL Turbo
+如果使用PyTorch 2+版本,可编译UNet以加速。首次推理会非常慢,后续会大大加快。
+当使用默认VAE时,将其保持在float32中,以避免在每次生成前后进行耗时的数据类型转换。或者,也可以使用由社区成员@madebyollin创建的16位VAE,它不需要转换为float32。
+总结:
+SDXL Turbo是一个强大的Stable Diffusion XL模型,可以快速生成高质量的图像。本文详细介绍了如何使用Diffusers库来加载模型、进行文本到图像和图像到图像的生成,并提供了一些优化技巧来进一步加速生成过程。通过巧妙运用SDXL Turbo及相关技术,用户可以轻松创作出令人印象深刻的图像作品。
+
+Kandinsky
+总之,这篇Diffusers教程主要介绍了如何使用Kandinsky模型进行文本到图像、图像到图像、修复、插值等任务。下面我将对教程的关键内容进行详细讲解:
+1.Kandinsky模型介绍
+Kandinsky是一系列多语言文本到图像生成模型。不同版本在架构上有所区别:
+Kandinsky 2.0使用两个多语言文本编码器,将结果拼接用于UNet。
+Kandinsky 2.1增加了图像先验模型(CLIP)以生成文本和图像嵌入之间的映射,从而提高图像质量。它还使用MoVQ解码器将潜在表示解码为图像。
+Kandinsky 2.2使用更大的CLIP-ViT-G模型作为图像编码器,并且对不同分辨率和长宽比的图像进行了重新训练。
+Kandinsky 3摒弃了先验模型和扩散模型的两阶段过程,改用更大的Flan-UL2文本编码器、带BigGAN-deep块的UNet和Sber-MoVQGAN解码器。
+2.执行各种生成任务的步骤
+对于所有任务,首先都要设置先验pipeline来编码prompt生成图像嵌入。然后根据任务类型,将prompt、嵌入和其他输入(如初始图像、mask等)传给相应的pipeline生成图像。
+文本到图像:使用KandinskyPipeline/KandinskyCombinedPipeline
+图像到图像:使用KandinskyImg2ImgPipeline/KandinskyImg2ImgCombinedPipeline,还需要初始图像
+修复:使用KandinskyInpaintPipeline/KandinskyInpaintCombinedPipeline,除了初始图像还需要指定mask
+插值:使用KandinskyPriorPipeline的interpolate方法,指定插值的图像、文本及其权重
+3.ControlNet
+对于Kandinsky 2.2,可以使用ControlNet进行条件生成。比如可以用深度图作为条件,使模型保留深度图的结构。需要使用KandinskyV22ControlnetPipeline/KandinskyV22ControlnetImg2ImgPipeline以及相应的先验pipeline。
+4.优化方法
+由于Kandinsky推理需要先验pipeline和解码pipeline,优化重点在解码阶段。建议的优化方法包括:
+	启用xFormers或torch.compile加速attention计算
+	使用enable_model_cpu_offload()避免OOM
+	尝试不同的scheduler如DDPMScheduler权衡速度和质量
+总的来说,Kandinsky是一个功能强大的文图生成模型。通过使用Diffusers库提供的各种pipeline,可以方便地完成从文本生成图像、图像编辑、修复、插值等多种任务。同时Diffusers也提供了一些优化推理的方法。掌握这些内容,就可以利用Kandinsky生成出高质量、有创意的图像了。
+
+ControlNet
+总:
+本文介绍了如何使用ControlNet来控制图像扩散模型,从而实现更精确、可控的图像生成。ControlNet通过额外的输入图像来调节扩散模型,实现了多种类型的条件控制,如轮廓线、深度图、人体姿态等。这使得用户能够更轻松地生成特定的图像,无需过多地调整文本提示或去噪值。
+分:
+1.ControlNet的原理:
+ControlNet由两组权重(或区块)组成,通过零卷积层连接。其中一组权重是锁定的,用于保留预训练扩散模型已学习的内容;另一组权重是可训练的,用于学习额外的条件输入。
+由于锁定的权重保留了预训练模型的知识,在新的条件输入上训练和实现ControlNet的速度与微调其他模型一样快。
+2.使用ControlNet进行文本到图像的生成:
+除了文本提示,还可以指定额外的条件输入,如轮廓线图像(Canny图)。
+加载针对Canny边缘检测训练的ControlNet模型,并将其传递给StableDiffusionControlNetPipeline。
+使用更快的UniPCMultistepScheduler调度器和模型卸载功能,可加速推理并减少内存使用。
+3.使用ControlNet进行图像到图像的转换:
+除了初始图像和文本提示,还可以传递额外的条件输入,如深度图。
+使用StableDiffusionControlNetImg2ImgPipeline进行图像到图像的转换。
+加载针对深度图训练的ControlNet模型,并将其传递给管道。
+4.使用ControlNet进行图像修复(Inpainting):
+需要初始图像、掩码图像和描述要替换掩码区域内容的文本提示。
+使用StableDiffusionControlNetInpaintPipeline进行图像修复。
+加载针对修复任务训练的ControlNet模型,并将其传递给管道。
+5.猜测模式(Guess Mode):
+无需提供文本提示,ControlNet编码器会根据输入的控制图(如深度图、人体姿态等)尽最大努力"猜测"其内容。
+通过设置pipeline中的guess_mode=True启用猜测模式,建议将guidance_scale值设置在3.0到5.0之间。
+6.将ControlNet与Stable Diffusion XL(SDXL)一起使用:
+加载与SDXL兼容的ControlNet模型,并将其传递给StableDiffusionXLControlNetPipeline。
+可以使用controlnet_conditioning_scale参数来调节条件输入的权重。
+7.多ControlNet(MultiControlNet):
+可以组合来自不同图像输入的多个ControlNet条件,以创建MultiControlNet。
+为获得更好的结果,建议将条件掩码,使其不重叠,并调整controlnet_conditioning_scale参数以确定分配给每个条件输入的权重。
+总:
+ControlNet为图像扩散模型提供了额外的控制能力,使用户能够通过添加条件输入(如轮廓线、深度图、人体姿态等)来指导图像生成过程。本文详细介绍了如何在文本到图像、图像到图像、图像修复等任务中使用ControlNet,并探讨了猜测模式、与SDXL模型的结合以及多ControlNet的组合。通过ControlNet,用户可以更轻松、更精确地生成所需的图像,扩展了图像生成的创意空间。
+
+Shap-E
+总:
+本文是一篇关于如何使用Shap-E模型生成3D资源的教程。Shap-E是一个用于生成3D资源的条件模型,可用于视频游戏开发、室内设计和建筑等领域。通过本教程,你将学会如何使用Shap-E生成自己的3D资源。
+分:
+1.Shap-E模型训练过程:
+编码器接受3D资源的点云和渲染视图,输出表示资源的隐式函数参数
+在编码器生成的潜在向量上训练扩散模型,生成神经辐射场(NeRF)或带纹理的3D网格,使3D资源更易于渲染和下游应用
+2.文本生成3D模型:
+使用ShapEPipeline,将文本提示传递给模型
+管道生成一系列图像帧,用于创建3D对象
+使用export_to_gif()函数将图像帧转换为3D对象的GIF
+3.图像生成3D模型:
+使用ShapEImg2ImgPipeline从另一个图像生成3D对象
+可以使用现有图像或生成全新图像(例如使用Kandinsky 2.1模型)
+将生成的图像传递给ShapEImg2ImgPipeline,生成其3D表示
+4.生成网格:
+Shap-E可以生成纹理网格输出,用于下游应用的渲染
+对于ShapEPipeline和ShapEImg2ImgPipeline,将output_type参数指定为"mesh"
+使用export_to_ply()函数将网格输出保存为ply文件
+可以使用trimesh库将ply文件转换为glb文件
+通过应用旋转变换,可以更改网格输出的默认视角
+总:
+Shap-E是一个强大的条件模型,用于从文本提示或图像生成3D资源。通过使用ShapEPipeline和ShapEImg2ImgPipeline,可以轻松创建3D对象并将其导出为GIF或网格文件。Shap-E生成的3D资源可用于各种下游应用,如视频游戏开发、室内设计和建筑。本教程提供了使用Shap-E生成自定义3D资源所需的所有信息和步骤。
+
+DiffEdit
+总：本文介绍了如何使用Diffusers库中的DiffEdit功能，通过提供源图像和目标文本描述，自动生成图像编辑所需的掩码，从而实现无需手动创建掩码的图像编辑。
+分：
+1.DiffEdit的工作原理
+扩散模型根据查询文本和参考文本对图像进行去噪，为图像的不同区域生成不同的噪声估计，其差异用于推断掩码，以确定图像的哪些区域需要更改以匹配查询文本。
+使用DDIM将输入图像编码为潜在空间。
+使用扩散模型对潜在空间进行解码，以查询文本为条件，使用掩码作为指南，使掩码外的像素与输入图像保持相同。
+2.使用DiffEdit进行图像编辑的步骤
+安装必要的库：diffusers、transformers和accelerate。
+加载StableDiffusionDiffEditPipeline、调度器和反向调度器，并启用一些优化以减少内存使用。
+使用generate_mask()函数生成图像掩码，需要提供源提示(source_prompt)和目标提示(target_prompt)以指定要编辑的图像内容。
+使用invert()函数创建反转潜在空间，并传递描述图像的提示或标题以指导反转潜在空间采样过程。
+将图像掩码和反转潜在空间传递给pipeline，目标提示现在成为提示，源提示用作负提示。
+3.使用Flan-T5模型自动生成源嵌入和目标嵌入
+加载Flan-T5模型和分词器。
+提供一些初始文本以提示模型生成源提示和目标提示。
+创建一个实用函数来生成提示并对其进行编码。
+将嵌入传递给generate_mask()和invert()函数以及pipeline以生成图像。
+4.使用BLIP模型自动生成反演标题
+加载BLIP模型和处理器。
+创建一个实用函数，从输入图像生成标题。
+将生成的标题传递给invert()函数以生成部分反转的潜在空间。
+总：DiffEdit是一种强大的图像编辑技术，它利用扩散模型和DDIM自动生成所需的掩码，使得无需手动创建掩码即可进行图像编辑。通过使用Flan-T5模型生成源嵌入和目标嵌入，以及使用BLIP模型生成反演标题，可以进一步简化图像编辑过程。本文详细介绍了使用DiffEdit进行图像编辑的步骤，为读者提供了实现无掩码图像编辑的实用指南。
+
+Distilled Stable Diffusion inference
+总：本文介绍了如何使用知识蒸馏技术来优化 Stable Diffusion 模型，从而在保证生成图像质量的同时，显著提高了推理速度并减小了模型尺寸。
+分：
+1.知识蒸馏技术的应用：Nota AI 通过知识蒸馏技术，去除了 Stable Diffusion 模型中的一些残差块和注意力块，使模型尺寸减小了 51%，同时在 CPU/GPU 上的推理延迟提高了 43%。这种优化方法能够在保证生成图像质量的同时，显著提高推理速度并减小模型尺寸。
+2.原始模型与蒸馏模型的性能比较：通过对原始 Stable Diffusion 模型和蒸馏后的模型进行推理时间的比较，可以发现蒸馏后的模型在相同条件下（如相同的推理步数、生成图像数量等）的推理时间显著缩短。例如，原始模型的推理时间为 45781.5 ms，而蒸馏后的模型仅需 29884.2 ms。
+3.使用微型自动编码器进一步提升性能：为了进一步加快推理速度，可以使用蒸馏后的微型 Stable Diffusion VAE 来对潜在空间进行去噪，生成最终图像。通过将蒸馏后的 Stable Diffusion 模型中的 VAE 替换为微型 VAE，推理时间可以进一步缩短至 27165.7 ms。
+总：综上所述，使用知识蒸馏技术可以有效优化 Stable Diffusion 模型，在保证生成图像质量的同时，显著提高推理速度并减小模型尺寸。此外，结合使用微型自动编码器，可以进一步提升模型性能。这种优化方法为在资源受限的环境中应用 Stable Diffusion 模型提供了新的思路和可能性。
+
+Pipeline callbacks
+总:
+本文介绍了如何在Diffusers库中使用callback函数来自定义扩散过程。通过设置 callback_on_step_end 参数,可以在每个去噪步骤结束时执行自定义的回调函数,从而动态调整管道属性或修改张量变量。这种灵活性为实现有趣的功能开启了大门,例如在推理过程中改变提示词嵌入、调整提示词权重以及修改引导比例等。此外,回调函数还可以用于在扩散过程中实现中断功能,这在构建与Diffusers交互的UI时尤为有用。
+分:
+1.自定义扩散过程
+通过设置 callback_on_step_end 参数,可以在管道的去噪循环中使用自定义函数来修改扩散过程。
+回调函数应具有以下参数:
+	pipe:提供对有用属性(如num_timestep和guidance_scale)的访问。可以通过更新底层属性来修改这些属性。
+	step_index和timestep:告诉你在去噪循环中的位置。
+	callback_kwargs:包含可在去噪循环中修改的张量变量的字典。它仅包括在callback_on_step_end_tensor_inputs参数中指定的变量。
+不同的管道可能使用不同的变量集,因此请检查管道的_callback_tensor_inputs属性,以获取可修改变量的列表。一些常见的变量包括latents和prompt_embeds。
+2.动态调整classifier-free guidance(CFG)
+文中给出了一个具体的例子,展示了如何使用回调函数在推理步骤的40%处关闭CFG,以节省计算资源且对性能影响最小。
+在关闭CFG后,需要调整prompt_embeds的batch size,以便正确工作。
+最后,将自定义的回调函数传递给callback_on_step_end参数,并将prompt_embeds传递给callback_on_step_end_tensor_inputs。
+3.中断扩散过程
+中断扩散过程在构建与Diffusers交互的UI时特别有用,因为它允许用户在对中间结果不满意时停止生成过程。
+中断回调函数支持文本到图像、图像到图像和修复(inpainting)任务的StableDiffusionPipeline和StableDiffusionXLPipeline。
+通过在回调函数中将管道的_interrupt属性设置为True,可以在特定步骤数后停止扩散过程。你也可以在回调函数内实现自己的自定义停止逻辑。
+总:
+总的来说,本文重点介绍了如何利用Diffusers库提供的回调函数机制来自定义和控制扩散过程。通过在每个去噪步骤结束时执行自定义的回调函数,可以实现动态调整CFG、中断扩散过程等功能,为构建更灵活、更具交互性的Diffusers应用开启了无限可能。Diffusers库目前仅支持callback_on_step_end,但如果你有很酷的用例并需要具有不同执行点的回调函数,欢迎提出功能请求!
+
+Create reproducible pipelines
+总:
+本文主要讲述了在使用扩散模型进行推理时,如何控制随机性以实现可重复的结果。虽然随机性是扩散模型的一个重要特性,但在某些情况下,我们需要生成可重复的结果,例如测试、复现结果或提高图像质量。文章提供了在 CPU 和 GPU 上实现可重复结果的方法,并介绍了确定性算法的使用。
+分:
+1.扩散模型中的随机性
+扩散模型在推理过程中大量依赖随机采样操作,包括创建高斯噪声张量以进行去噪,以及在调度步骤中添加噪声。每次运行管道时,torch.randn 都会使用不同的随机种子来创建高斯噪声,导致每次运行时生成不同的结果。这对于扩散管道来说是很好的,因为它每次都会生成不同的随机图像。
+2.在 CPU 上生成可重复的结果
+要在 CPU 上生成可重复的结果,需要使用 PyTorch 的 Generator 并设置种子。通过创建一个 Generator 对象并设置种子,然后将其传递给管道的所有随机函数,可以确保每次运行时都会生成相同的结果。
+3.在 GPU 上生成可重复的结果
+在 GPU 上编写可重复的管道要稍微复杂一些,因为矩阵乘法在 GPU 上的确定性不如 CPU。为了解决这个问题,Diffusers 库提供了一个 randn_tensor() 函数,用于在 CPU 上创建随机噪声,然后在必要时将张量移动到 GPU。即使管道在 GPU 上运行,也可以始终传递一个 CPU Generator。
+4.使用确定性算法
+通过配置 PyTorch 使用确定性算法,也可以创建可重复的管道。然而,确定性算法可能比非确定性算法慢,性能可能会有所下降。为了避免非确定性行为,需要将环境变量 CUBLAS_WORKSPACE_CONFIG 设置为 :16:8,并禁用 PyTorch 的基准测试功能。最后,将 True 传递给 torch.use_deterministic_algorithms 以启用确定性算法。
+总:
+总的来说,本文介绍了在使用扩散模型时如何控制随机性以实现可重复的结果。在 CPU 上,可以使用 PyTorch 的 Generator 并设置种子来生成可重复的结果。在 GPU 上,可以使用 Diffusers 库提供的 randn_tensor() 函数来创建随机噪声,并始终传递一个 CPU Generator。此外,还可以通过配置 PyTorch 使用确定性算法来创建可重复的管道,但这可能会导致性能下降。理解并应用这些方法可以帮助我们在需要时生成可重复的结果,提高扩散模型的可靠性和实用性。
+
+Community pipelines
+总述:
+本文介绍了Diffusers库中的社区pipeline(community pipelines)功能,展示了如何利用社区pipeline实现多语言稳定扩散(Multilingual Stable Diffusion)和魔法融合(MagicMix)两种有趣的应用,希望能够激发读者创建自己的pipeline。
+要点详解:
+1.社区pipeline允许用户发挥创意,构建自己独特的pipeline并与社区分享。这些pipeline位于diffusers/examples/community文件夹下,包含推理和训练的示例代码。
+2.要加载一个社区pipeline,可以在实例化DiffusionPipeline时使用custom_pipeline参数,指定community文件夹下的文件名。如果pipeline无法正常工作,可以在GitHub上提issue并提及作者。
+3.多语言稳定扩散pipeline利用预训练的XLM-RoBERTa模型进行语言识别,再使用mBART-large-50模型进行翻译,支持生成20种语言的文本到图像。示例代码展示了如何实例化该pipeline并生成不同语言的提示词对应的图像。
+4.MagicMix可以将图像和文本提示混合,生成保留原始图像结构的新图像。mix_factor控制提示词对布局生成的影响,kmin和kmax分别控制内容生成过程的步数以及在原始图像布局中保留的信息量。示例展示了如何使用MagicMix生成"床"主题的混合图像。
+总结:
+Diffusers库的社区pipeline功能为用户提供了发挥创意的空间,不仅可以使用现有的多语言稳定扩散和MagicMix等有趣的pipeline,还鼓励大家构建并分享自己的pipeline。这极大地扩展了Diffusers库的应用范围和灵活性,使得更多有创意的想法能够快速实现。作者希望本文能够激发读者的灵感,为社区贡献出更多优秀的pipeline。
+
+Contribute a community pipeline
+总:
+本文介绍了如何在Diffusers库中创建和分享社区管道(community pipeline)。社区管道允许用户在DiffusionPipeline的基础上添加自定义功能,方便社区成员快速加载和使用,无需大量修改代码。
+分:
+1.初始化管道
+创建一个继承自DiffusionPipeline的社区管道类。
+在__init__函数中接收所需组件(如unet和scheduler)作为参数。
+使用register_modules函数注册这些组件,以便能够通过save_pretrained()函数保存管道和组件。
+2.定义前向传播
+在__call__函数中定义管道的前向传播过程,可以根据需求添加自定义功能。
+在本例中,创建一个随机图像,并仅调用unet和scheduler一次,将timestep设置为1。
+3.加载预训练权重
+如果社区管道的结构与预训练管道相同,可以直接加载预训练权重。
+使用from_pretrained()函数加载预训练权重,并将use_safetensors设置为True。
+4.分享管道
+通过在Diffusers仓库的examples/community子文件夹中打开Pull Request,将社区管道添加到仓库中。
+或者,将社区管道文件直接上传到Hugging Face Hub的模型仓库。
+用户可以通过设置custom_pipeline参数来使用社区管道。
+5.社区管道的工作原理
+社区管道是一个继承自DiffusionPipeline的类。
+模型权重和scheduler配置从pretrained_model_name_or_path加载。
+社区管道的实现代码定义在pipeline.py文件中。
+如果无法从官方仓库加载所有管道组件的权重,需要将其他组件直接传递给管道。
+总:
+社区管道为Diffusers库提供了一种灵活、易于分享的方式,允许用户在现有管道的基础上添加自定义功能。通过继承DiffusionPipeline类并定义前向传播过程,用户可以快速创建自己的管道。社区管道可以通过Diffusers仓库或Hugging Face Hub与社区共享,其他用户只需设置custom_pipeline参数即可轻松加载和使用这些管道。这种机制极大地促进了Diffusers社区的协作和创新。
+
+Latent Consistency Model-LoRA
+总:
+本文主要介绍了如何使用Latent Consistency Models (LCM)结合LoRA技术进行快速、高质量的图像生成。通过使用LCM-LoRA，我们可以在2-4步内生成高分辨率图像，显著加速了文本到图像的生成过程。此外，LCM-LoRA可以应用于各种任务，如图像到图像转换、ControlNet/T2I-Adapter、修复、AnimateDiff等。
+分:
+1.LCM-LoRA的原理
+LCM可以从任何预训练的Stable Diffusion (SD)模型中蒸馏出来，只需4,000次训练步骤，就能在2-4步内生成高质量的768x768分辨率图像。
+LCM-LoRA的核心思想是只训练少量的适配器层(LoRA)，而不是训练整个模型，这样可以保持可训练参数的数量可控。
+生成的LoRA可以应用于任何微调版本的模型，而无需单独蒸馏。
+2.使用LCM-LoRA进行推理的一般工作流程
+加载任务特定的管道和模型。
+将调度器设置为LCMScheduler。
+加载适用于该模型的LCM-LoRA权重。
+将guidance_scale降低到[1.0, 2.0]之间，并将num_inference_steps设置为[4, 8]之间。
+使用通常的参数通过管道执行推理。
+3.LCM-LoRA在不同任务中的应用
+文本到图像生成：使用StableDiffusionXLPipeline和LCMScheduler，加载LCM-LoRA权重，通过设置较少的推理步骤(如4步)生成图像。
+图像到图像转换：使用AutoPipelineForImage2Image和LCMScheduler，加载LCM-LoRA权重，通过设置不同的num_inference_steps、strength和guidance_scale参数获得最佳结果。
+与风格化LoRA结合：LCM-LoRA可以与其他LoRA结合，在很少的步骤内(4-8步)生成风格化图像。
+ControlNet/T2I-Adapter：使用StableDiffusionControlNetPipeline或StableDiffusionXLAdapterPipeline，结合LCMScheduler和LCM-LoRA权重进行推理。
+修复：使用AutoPipelineForInpainting和LCMScheduler，加载LCM-LoRA权重进行图像修复。
+AnimateDiff：使用AnimateDiffPipeline和LCMScheduler，加载LCM-LoRA权重，通过生成多帧(16-24帧)并使用较少的推理步骤(4-8步)显著加速动画生成过程。
+总:
+LCM-LoRA技术通过将Latent Consistency Models与LoRA相结合，实现了快速、高质量的图像生成。通过在不同任务中应用LCM-LoRA，如文本到图像生成、图像到图像转换、ControlNet/T2I-Adapter、修复和AnimateDiff等，我们可以显著加速生成过程，同时保持生成图像的高质量。此外，LCM-LoRA可以与其他LoRA结合，生成风格化图像，进一步扩展了其应用范围。
+
+Latent Consistency Model
+总:
+本文介绍了如何使用Latent Consistency Models (LCM)来加速扩散模型的推理过程,使得高质量的图像生成可以在2-4步内完成。这使得扩散模型可以在接近实时的设置中使用。文章通过几个具体的例子,展示了如何将LCM应用于文本到图像生成、图像到图像转换、结合风格LoRA、以及与ControlNet/T2I-Adapter结合使用等任务中。
+分:
+1.文本到图像生成
+使用StableDiffusionXLPipeline管道与LCMScheduler和LCM-LoRA相结合,可以快速完成文本到图像的生成。与标准的SDXL相比,使用LCM只需要4步推理,大大减少了生成图像所需的时间。需要注意的是,LCM使用引导嵌入来应用分类器引导,因此批量大小不需要加倍,但负面提示不会影响去噪过程。此外,UNet使用[3., 13.]的引导比例范围进行训练,这是引导比例的理想范围。
+2.图像到图像转换
+LCM同样可以应用于图像到图像的任务。以LCM_Dreamshaper_v7模型为例,通过使用AutoPipelineForImage2Image管道,并结合LCMScheduler,可以快速完成图像到图像的转换。不同的提示词和输入图像可以生成不同的结果。为了获得最佳效果,建议尝试不同的num_inference_steps、strength和guidance_scale参数。
+3.结合风格LoRA
+LCM可以与其他风格LoRA结合使用,在很少的步骤(4-8步)内生成风格化的图像。例如,可以将LCM与papercut LoRA相结合,快速生成剪纸风格的图像。
+4.与ControlNet/T2I-Adapter结合使用
+LCM可以与ControlNet或T2I-Adapter结合使用,以实现更多样化的图像生成效果。以LCM_Dreamshaper_v7模型与canny ControlNet为例,通过使用StableDiffusionControlNetPipeline管道和LCMScheduler,可以根据输入的canny边缘图生成相应的图像。类似地,LCM也可以与T2I-Adapter(如Canny T2I-Adapter)结合使用。为了获得最佳效果,同样建议尝试不同的推理参数。
+总:
+Latent Consistency Models为加速扩散模型的推理提供了一种有效的方法。通过将LCM与不同的管道、调度器和LoRA相结合,可以在各种任务(如文本到图像生成、图像到图像转换等)中快速生成高质量的图像。LCM的引入使得扩散模型可以在接近实时的设置中使用,大大拓展了其应用范围。在使用LCM时,需要注意一些细节,如引导比例的选择,以及通过尝试不同的推理参数来获得最佳效果。总的来说,LCM为扩散模型的实际应用提供了一种高效、灵活的解决方案。
+
+Stable Video Diffusion
+总:
+本文主要介绍了如何使用Stable Video Diffusion(SVD)模型从图像生成短视频。SVD是一个强大的图像到视频生成模型,可以根据输入图像生成2-4秒的高分辨率(576x1024)视频。文章详细介绍了使用SVD生成视频的步骤,以及如何优化模型以提高性能和减少内存使用。
+分:
+1.安装必要的库:在开始之前,需要安装diffusers、transformers和accelerate这些Python库。
+2.选择合适的模型:SVD有两个变体:SVD和SVD-XT。SVD检查点经过训练可生成14帧,而SVD-XT检查点经过微调可生成25帧。本文使用SVD-XT模型进行示范。
+3.加载模型和输入图像:使用StableVideoDiffusionPipeline.from_pretrained方法加载SVD-XT模型,并使用diffusers.utils.load_image方法加载要作为视频生成条件的图像。将图像调整为1024x576分辨率。
+4.生成视频:使用加载的模型和图像生成视频帧。可以通过设置decode_chunk_size参数来调整生成帧的数量。最后,使用export_to_video函数将生成的帧导出为视频文件。
+5.优化模型性能:为了提高模型推理速度,可以使用torch.compile方法编译UNet组件。这可以带来20-25%的加速,但会略微增加内存使用。
+6.减少内存使用:视频生成非常消耗内存,因为需要同时生成多个帧。为了减少内存占用,可以启用模型卸载(model offloading)、前向分块(feed-forward chunking)以及减小解码块大小(decode_chunk_size)等方法。这些方法以推理速度为代价换取更低的内存占用。
+7.微调控制:除了输入图像外,Stable Video Diffusion还接受微调参数以实现对生成视频的更多控制,例如帧率(fps)、运动桶ID(motion_bucket_id)和噪声增强强度(noise_aug_strength)等。通过调整这些参数可以控制生成视频的运动效果。
+总:
+综上所述,本文详细介绍了如何使用Stable Video Diffusion模型从图像生成高质量的短视频,并给出了提高模型性能和减少内存占用的实用技巧。通过调整微调控制参数,用户可以根据需要定制生成视频的运动效果。Stable Video Diffusion是一个功能强大的图像到视频生成模型,非常适合需要从静止图像快速生成动态视频内容的应用场景。
+
+
+Training
+Create a dataset for training
+总：本文主要介绍了如何使用🤗 Datasets库创建自己的数据集用于训练模型。文中提供了两种方式来创建数据集:一是直接提供一个包含图像的文件夹,二是将数据集上传到Hugging Face Hub并传递数据集仓库ID。
+分：
+1.数据集结构
+数据集的结构取决于要训练模型的任务。最基本的数据集结构是一个包含图像的目录,用于无条件图像生成等任务。另一种数据集结构可能是一个包含图像的目录和一个包含相应文本标题的文本文件,用于文本到图像生成等任务。
+2.直接提供图像文件夹
+对于无条件生成,可以将自己的数据集作为图像文件夹提供。训练脚本使用🤗 Datasets中的ImageFolder构建器从文件夹自动构建数据集。目录结构应如下:
+data_dir/xxx.png
+data_dir/xxy.png
+data_dir/[...]/xxz.png
+将数据集目录的路径传递给--train_data_dir参数,然后就可以开始训练了。
+3.上传数据集到Hugging Face Hub
+首先使用ImageFolder特性创建一个数据集,该特性会创建一个包含PIL编码图像的图像列。可以使用data_dir或data_files参数指定数据集的位置。data_files参数支持将特定文件映射到训练或测试等数据集拆分。
+然后使用push_to_hub方法将数据集上传到Hub。现在可以通过将数据集名称传递给--dataset_name参数来使用该数据集进行训练。
+4.下一步
+创建数据集后,可以将其插入到训练脚本的train_data_dir(如果数据集是本地的)或dataset_name(如果数据集在Hub上)参数中。
+接下来,可以尝试使用创建的数据集来训练无条件生成或文本到图像生成的模型。
+总：综上所述,本文详细介绍了如何使用🤗 Datasets库创建自定义数据集用于训练模型。可以直接提供包含图像的文件夹,也可以将数据集上传到Hugging Face Hub。创建好数据集后,可以将其用于训练各种生成任务的模型,为定制化训练提供了便利。
+
+Adapt a model to a new task
+总:
+本文主要介绍了如何使用Diffusers库将一个预训练的文本到图像模型适配到新的任务中,具体来说是将其适配到图像修复任务。这个过程涉及到修改UNet2DConditionModel的架构,尤其是需要调整输入通道的数量。
+分:
+1.不同的扩散模型常常共享相同的组件,这使得我们可以将一个预训练的模型适配到全新的任务中。本文以将文本到图像模型适配到图像修复任务为例进行说明。
+2.UNet2DConditionModel在文本到图像任务中默认接受4个通道的输入样本。而在图像修复任务中,需要9个通道的输入样本。因此,我们需要将模型的输入通道数从4改为9。
+3.为了进行适配,我们首先用预训练的文本到图像模型权重初始化一个UNet2DConditionModel,同时将in_channels参数设置为9。由于改变了输入通道数,我们需要设置ignore_mismatched_sizes=True和low_cpu_mem_usage=False来避免尺寸不匹配的错误。
+4.虽然其他组件的预训练权重可以直接从文本到图像模型的checkpoint中初始化,但unet的输入通道权重(conv_in.weight)是随机初始化的。为了让模型在图像修复任务上取得良好效果,我们必须对其进行微调,否则模型将只会返回噪声。
+总:
+通过修改UNet2DConditionModel的输入通道数,并使用预训练的文本到图像模型权重进行初始化,我们可以将该模型适配到图像修复任务中。但是,由于输入通道权重是随机初始化的,我们还需要对适配后的模型进行微调,以使其在新任务上取得良好的表现。这种适配方法展示了扩散模型的灵活性和通用性,使我们能够利用现有的预训练模型来解决新的问题。
+
+
+
+Models
+Unconditional image generation
+总:
+这篇教程主要介绍了如何使用Diffusers库中的train_unconditional.py训练脚本来训练一个无条件图像生成模型。通过对训练脚本的学习和修改,你可以训练自己的数据集,定制训练参数,最终得到一个能生成高质量图像的扩散模型。
+分:
+1.训练前的准备工作
+从源代码安装Diffusers库
+进入训练脚本所在目录examples/unconditional_image_generation
+安装训练相关的依赖 requirements.txt
+使用Accelerate库初始化多卡训练环境
+2.了解训练脚本的参数
+训练脚本提供了很多可配置参数,可以通过修改这些参数来定制化训练
+一些重要的参数包括:
+	dataset_name:所使用的数据集名称或路径
+	output_dir:训练好的模型保存位置
+	push_to_hub:是否上传模型到Hugging Face Hub
+	checkpointing_steps:保存checkpoint的频率,方便从断点继续训练
+3.修改训练脚本的细节
+训练代码的核心在main()函数中,主要包括几个部分:
+	初始化UNet2DModel模型结构
+	初始化scheduler和optimizer
+	加载和预处理数据集
+	训练循环,包括加噪、预测噪声残差、计算loss、保存模型等步骤
+可以通过修改这些部分来适配自己的需求
+4.启动训练
+配置好训练参数后,使用accelerate launch命令启动训练
+一个完整的训练可能需要较长时间,如2小时
+5.使用训练好的模型进行推理
+训练脚本会自动保存训练好的模型
+可以使用DiffusionPipeline来加载训练好的模型进行推理,生成图像
+总:
+这篇教程详细介绍了使用Diffusers库提供的训练脚本train_unconditional.py来训练无条件图像生成扩散模型的完整流程。通过学习这个训练脚本,了解各训练参数和训练细节,并根据自己的需求进行修改,我们就可以基于Diffusers库方便地训练出高质量的图像生成模型。
+
+Text-to-image
+总:
+本篇教程介绍了如何使用Diffusers库中的train_text_to_image.py脚本来训练自己的文本到图像(text-to-image)模型。通过调整训练脚本中的各种参数,可以根据自己的需求定制训练过程。训练完成后,就能使用训练好的模型进行推理,生成与输入文本描述相符的图像。
+分:
+1.训练前的准备工作:
+从源码安装Diffusers库,并进入examples/text_to_image目录
+安装训练脚本所需的依赖
+使用Accelerate库初始化训练环境,以便在多GPU/TPU上训练或使用混合精度训练
+如果要在自己的数据集上训练,需要先创建符合要求的数据集
+2.理解训练脚本的关键参数:
+pretrained_model_name_or_path:预训练模型在Hugging Face Hub上的名称或本地路径
+dataset_name:训练数据集的名称或本地路径
+image_column:数据集中图像列的名称
+caption_column:数据集中文本描述列的名称
+output_dir:训练后模型的保存路径
+push_to_hub:是否将训练好的模型上传到Hugging Face Hub
+checkpointing_steps:保存检查点的频率,方便从断点恢复训练
+3.Min-SNR加权策略可以通过重平衡损失来帮助训练,实现更快的收敛。该策略通过设置--snr_gamma参数启用(推荐值为5.0)。它仅支持PyTorch版训练脚本。
+4.训练脚本的关键组成:
+加载调度器(scheduler)和分词器(tokenizer)
+加载UNet模型
+对数据集的文本和图像列进行预处理
+训练循环:将图像编码到潜在空间,在潜在表示上添加噪声,计算用于条件生成的文本嵌入,更新模型参数,保存并上传模型到Hub
+5.启动训练脚本:
+设置MODEL_NAME和dataset_name环境变量,指定预训练模型和数据集
+使用accelerate launch命令启动训练,可以通过各种参数定制训练过程
+训练完成后,可以使用训练好的模型进行推理,生成图像
+总结:
+这篇教程详细介绍了如何使用Diffusers库提供的train_text_to_image.py脚本来训练自定义的文本到图像模型。通过调整训练参数、使用Min-SNR加权策略等方法,可以优化训练过程。教程还解释了训练脚本的关键组成部分,包括数据预处理、训练循环等。最后,按照教程中的步骤启动训练,就可以训练出自己的文本到图像模型,并用于生成与输入文本相关的图像。
+
+Stable Diffusion XL
+总：
+本文是Diffusers库的教程文档之一，主要介绍如何使用Diffusers库中的训练脚本train_text_to_image_sdxl.py来训练一个更大、更强大的Stable Diffusion XL (SDXL)模型。SDXL模型能够生成更高分辨率的图像,但由于其模型尺寸较大,训练时需要更多的计算资源和内存优化技巧。
+分：
+1.环境准备
+从源码安装Diffusers库
+使用Accelerate库配置训练环境,支持多GPU/TPU和混合精度训练
+准备自定义数据集(可选)
+2.训练脚本参数
+pretrained_vae_model_name_or_path: 指定预训练VAE模型的路径,以避免SDXL自带VAE的数值不稳定问题
+proportion_empty_prompts: 将图像提示替换为空字符串的比例
+timestep_bias_strategy: 指定应用偏差的时间步策略,影响模型学习细节层次
+snr_gamma: Min-SNR加权策略的参数,有助于加速收敛
+3.训练脚本解析
+加载两个文本编码器和分词器,对应SDXL的架构设计
+预先计算提示词嵌入和图像嵌入,并在训练过程中直接使用
+根据指定的时间步偏差策略生成时间步权重,作为噪声添加到输入中
+训练循环执行去噪过程,生成目标图像
+4.启动训练脚本
+设置相关环境变量(MODEL_NAME,VAE_NAME,DATASET_NAME)
+添加必要的训练参数,如batch_size,learning_rate,mixed_precision等
+可选择使用Weights & Biases监控训练进度
+5.训练后的应用
+使用训练好的SDXL模型进行推理,生成指定提示的图像
+阅读Stable Diffusion XL指南,了解更多使用技巧和任务类型
+尝试使用DreamBooth和LoRA等技术在SDXL基础上进行个性化训练
+总：
+通过使用Diffusers库提供的SDXL训练脚本,并结合必要的环境配置和训练参数调整,我们可以训练出一个性能更强大的Stable Diffusion模型。在训练过程中,预计算嵌入向量、应用时间步偏差策略以及使用混合精度等方法,有助于节省内存并加速训练。训练完成后,我们可以将SDXL模型应用于各种图像生成任务,并进一步探索个性化训练的可能性。Diffusers库的教程文档提供了详尽的指导,帮助我们充分发挥SDXL模型的潜力。
+
+Kandinsky 2.2
+总:
+本篇教程主要介绍了如何使用Diffusers库训练Kandinsky 2.2多语言文本到图像生成模型。Kandinsky 2.2包含一个图像先验模型,用于从文本提示中创建图像嵌入,和一个解码器模型,用于基于先验模型的嵌入生成图像。为了获得最佳效果,应该同时训练先验模型和解码器模型。
+分:
+1.环境准备
+从源码安装Diffusers库
+安装训练脚本所需的依赖
+使用Accelerate库配置训练环境,以支持多GPU训练和混合精度
+2.脚本参数
+训练脚本提供了许多参数来帮助自定义训练,如batch size、learning rate等
+可以在训练命令中设置自己的参数值
+使用--mixed_precision参数可以启用混合精度,加速训练
+3.Min-SNR加权策略
+Min-SNR加权有助于通过重新平衡损失来实现更快的收敛
+训练脚本支持预测epsilon(噪声)或v_prediction
+将--snr_gamma参数设置为推荐值5.0来启用Min-SNR
+4.训练脚本解析
+除了调度器和分词器,训练脚本还加载了用于预处理图像的CLIPImageProcessor和用于编码图像的CLIPVisionModelWithProjection模型
+Kandinsky使用PriorTransformer生成图像嵌入,需要设置优化器来学习先验模型的参数
+输入标题通过分词器分词,图像通过CLIPImageProcessor预处理
+训练循环将输入图像转换为潜变量,向图像嵌入添加噪声并进行预测
+5.启动训练脚本
+可以使用Pokémon BLIP标题数据集进行训练,也可以创建自己的数据集
+使用Weights&Biases监控训练进度,添加--report_to=wandb参数
+使用--validation_prompt参数设置验证提示,以跟踪结果
+6.推理
+训练完成后,可以使用新训练的模型进行推理
+加载训练好的先验模型和解码器模型(可使用自己训练的解码器检查点)
+生成图像
+总:
+通过阅读本教程,我们学习了如何使用Diffusers库训练Kandinsky 2.2模型。训练过程涉及环境准备、脚本参数设置、训练脚本解析、启动训练和推理等关键步骤。为了获得最佳效果,我们需要同时训练先验模型和解码器模型。此外,使用混合精度和Min-SNR加权策略可以加速收敛。训练完成后,我们就可以使用新模型进行文本到图像生成任务。
+
+Wuerstchen
+总:
+Wuerstchen模型通过压缩潜在空间,在不影响生成图像质量的情况下大幅降低了计算成本,加速了推理速度。本文介绍了如何使用train_text_to_image_prior.py训练脚本来训练自己的Wuerstchen模型,并给出了详细的训练步骤和代码示例。
+分:
+1.训练前的准备工作
+从源码安装Diffusers库
+切换到脚本所在目录并安装依赖
+使用accelerate配置训练环境
+准备自己的训练数据集(可选)
+2.理解训练脚本的关键部分
+脚本参数:可以通过修改parse_args()函数中的参数来自定义训练
+训练代码:
+	初始化图像编码器EfficientNet,加载预训练权重
+	加载WuerstchenPrior模型用于优化
+	对图像进行变换,对caption进行tokenize
+	训练循环:用 EfficientNetEncoder将图像压缩到潜在空间,加噪声,用WuerstchenPrior预测噪声残差
+3.启动训练脚本
+设置DATASET_NAME环境变量为训练集名称
+添加--report_to=wandb进行训练过程监控(需要wandb账号)
+其他训练参数如学习率、batch size、训练步数等可以作为启动参数传入
+训练完成后可以将模型推送到hub
+4.使用训练好的模型进行推理
+从hub加载训练好的模型
+使用AutoPipelineForText2Image进行文本到图像的生成
+总:
+通过本教程,我们学习了如何使用Diffusers库提供的训练脚本train_text_to_image_prior.py来训练一个Wuerstchen文本到图像生成模型。Wuerstchen通过压缩潜在空间,在保证生成图像质量的同时大幅降低了计算开销,是一种高效的扩散模型。我们还了解了训练脚本的关键组成部分,知道了如何修改训练参数来适应自己的需求。最后,我们学习了如何使用训练好的模型进行推理,生成高质量的图像。
+
+ControlNet
+总:
+本文是一篇关于如何使用Diffusers库训练ControlNet模型的教程指南。ControlNet是一种适配器(adapter)模型,它训练在预训练模型的基础之上,通过添加额外的条件输入图像(如边缘、深度图、人体姿态等),可以对图像生成过程进行更多的控制。文章主要介绍了ControlNet的训练脚本train_controlnet.py的使用方法,以及在GPU/TPU上高效训练的一些技巧。通过学习本教程,你将掌握如何使用自己的数据集来训练ControlNet模型。
+分:
+1.安装和环境配置
+从源码安装Diffusers库,并切换到controlnet训练脚本所在目录安装依赖
+使用Accelerate库配置多GPU/TPU训练环境
+2.训练脚本参数
+脚本提供许多参数用于自定义训练,包括batch大小、学习率等,可通过修改脚本中parse_args()函数的默认值或在命令行中设置
+使用--mixed_precision参数可启用混合精度训练加速
+使用--gradient_accumulation_steps参数可累积梯度,用更大的batch size训练
+3.Min-SNR加权策略
+可使用Min-SNR加权策略重新平衡损失,加速收敛,该策略通过--snr_gamma参数启用
+4.训练脚本解析
+脚本中make_train_dataset函数用于对数据集进行预处理,包括图像变换、caption标记化等
+在main()函数中加载tokenizer、文本编码器、scheduler和模型,其中ControlNet模型可以从已有权重加载或从UNet初始化
+优化器设置为更新ControlNet的参数
+训练循环中,将条件文本嵌入和图像传递给ControlNet的下采样和中间块
+5.启动训练
+设置MODEL_NAME为Hub上的模型或本地路径,OUTPUT_DIR为保存模型的路径
+准备用于训练的条件图像
+在16GB显存GPU上,可使用bitsandbytes的8 bit Adam优化器和梯度检查点功能优化训练
+使用accelerate launch命令启动训练脚本,各种参数可以按需配置
+6.训练后使用模型进行推理
+从本地加载训练好的ControlNet权重
+将ControlNet与StableDiffusion管线模型结合,用于推理生成图像
+总结:
+本教程详细讲解了如何使用Diffusers库提供的脚本来训练自己的ControlNet模型。通过学习训练脚本的使用方法和内部原理,以及一些在GPU/TPU上优化训练的技巧,你可以利用自己的数据集训练出定制化的ControlNet模型。训练完成后,可将其与原版StableDiffusion模型结合,通过指定条件图像和文本提示,对图像生成过程进行更精细的控制。掌握了这些内容,你就可以利用ControlNet的强大能力,实现更多创意性的AI绘图应用。
+
+T2I-Adapter
+总:
+本文是 Hugging Face 的 Diffusers 库中关于训练 T2I-Adapter 模型的教程。T2I-Adapter 是一种轻量级的适配器模型,可以为图像生成提供额外的条件输入图像(如线稿、边缘、素描、深度、姿势等),以更好地控制图像生成过程。该教程详细介绍了如何使用 train_t2i_adapter_sdxl.py 训练脚本来训练自己的 T2I-Adapter 模型,并提供了相关的训练技巧和注意事项。
+分:
+1.T2I-Adapter 简介
+T2I-Adapter 是一种轻量级的适配器模型,仅有约7700万参数和300MB的文件大小。
+它通过在 UNet 中插入权重来提供额外的条件输入,而不是复制和训练整个 UNet。
+T2I-Adapter 目前仅支持与 Stable Diffusion XL (SDXL) 模型一起训练。
+2.环境准备
+从源代码安装 Diffusers 库,并安装相关依赖。
+使用 Accelerate 库配置训练环境,以支持多 GPU/TPU 和混合精度训练。
+如果要在自己的数据集上训练模型,需要参考 "Create a dataset for training" 指南创建适用于训练脚本的数据集。
+3.训练脚本参数
+训练脚本提供了许多参数来自定义训练过程,如训练批次大小、学习率等。
+重点介绍了与 T2I-Adapter 相关的参数,如指定预训练的 VAE 模型、裁剪坐标嵌入的高度和宽度、条件图像在数据集中的列名等。
+4.训练脚本解析
+准备数据集,包括对提示进行分词以及对图像和条件图像应用转换。
+加载预训练的 T2I-Adapter 或随机初始化权重。
+初始化优化器,并在训练循环中将条件图像和文本嵌入传递给 UNet 以预测噪声残差。
+5.启动训练脚本
+使用 fusing/fill50k 数据集进行示例训练,也可以使用自己创建的数据集。
+设置环境变量 MODEL_DIR 和 OUTPUT_DIR,分别指定预训练模型和保存模型的路径。
+使用 Weights & Biases 监控训练进度,需要在训练命令中添加相关参数。
+训练完成后,可以使用训练好的 T2I-Adapter 进行推理。
+总:
+本教程详细介绍了如何使用 Diffusers 库提供的训练脚本来训练 T2I-Adapter 模型。通过阅读本教程,读者可以了解 T2I-Adapter 的基本概念、训练脚本的使用方法以及如何在自己的数据集上训练模型。教程还提供了一些训练技巧和注意事项,如使用 Accelerate 库配置训练环境、监控训练进度等。最后,教程还展示了如何使用训练好的 T2I-Adapter 模型进行推理。总的来说,本教程为读者提供了一个全面的指南,帮助他们了解和使用 T2I-Adapter 模型。
+
+InstructPix2Pix
+总:
+本文主要介绍了如何使用Diffusers库中的InstructPix2Pix模型进行图像编辑训练。InstructPix2Pix是一个基于Stable Diffusion的模型,可以根据人类提供的指令对图像进行编辑。文章详细解释了训练脚本的参数设置、数据预处理、训练循环以及如何在训练后使用模型进行推理。
+分:
+1.训练前的准备工作:
+安装Diffusers库并导航到示例文件夹
+使用Accelerate库配置训练环境
+准备自定义数据集(可选)
+2.训练脚本的参数:
+original_image_column:原始图像列
+edited_image_column:编辑后的图像列
+edit_prompt_column:编辑指令列
+conditioning_dropout_prob:训练过程中编辑图像和编辑提示的dropout概率,用于支持classifier-free guidance(CFG)
+3.训练脚本的主要部分:
+修改UNet的输入通道数,以适应InstructPix2Pix的额外条件图像
+对编辑后的图像和编辑指令进行预处理和标记化,确保对原始图像和编辑后的图像应用相同的图像转换
+在训练循环中,将编辑后的图像编码到潜在空间,并应用dropout到原始图像和编辑指令嵌入,以支持CFG
+4.启动训练脚本:
+设置MODEL_NAME和DATASET_ID环境变量
+使用Accelerate启动训练脚本,并指定相关参数
+可以使用Weights and Biases监控训练进度
+5.训练后的推理:
+使用训练好的InstructPix2Pix模型进行图像编辑推理
+调整num_inference_steps、image_guidance_scale和guidance_scale的值,以平衡推理速度和质量
+6.Stable Diffusion XL(SDXL):
+SDXL是一个生成高分辨率图像的强大文本到图像模型
+可以使用train_instruct_pix2pix_sdxl.py脚本训练SDXL模型,以遵循图像编辑指令
+总:
+本文提供了使用Diffusers库训练InstructPix2Pix模型的详细指南。通过设置适当的参数、准备数据集、修改训练脚本并启动训练,用户可以训练自己的InstructPix2Pix模型,用于根据指令编辑图像。训练后,用户可以调整推理参数,以达到理想的编辑效果。此外,文章还简要介绍了SDXL模型,它是一个用于生成高分辨率图像的强大模型。
+
+
+Methods
+Textual Inversion
+总：本文是一篇关于如何使用Diffusers库中的Textual Inversion技术进行个性化图像生成模型训练的教程。Textual Inversion是一种只需要几张示例图片就能个性化图像生成模型的训练技术，通过学习和更新文本嵌入（新的嵌入与一个特殊的单词绑定，必须在提示中使用）来匹配提供的示例图像。
+分：
+1.环境准备：在运行训练脚本之前，需要从源代码安装Diffusers库，导航到示例文件夹并安装所需的依赖项。此外，还需要初始化一个🤗 Accelerate环境，用于在多个GPU/TPU上训练或使用混合精度。
+2.脚本参数：训练脚本提供了许多参数来帮助用户根据需要定制训练过程。一些重要的参数包括：预训练模型的名称或路径、训练数据集的路径、保存训练模型的输出目录、是否将训练好的模型上传到Hub等。
+3.训练脚本：textual_inversion.py使用自定义数据集类TextualInversionDataset来创建数据集。可以自定义图像大小、占位符标记、插值方法、是否裁剪图像等。训练循环处理从预测噪声残差到更新特殊占位符标记的嵌入权重的所有内容。
+4.启动脚本：在进行必要的配置后，可以启动训练脚本。本教程使用了一个猫玩具的图像数据集作为示例。训练完成后，可以使用新训练的模型进行推理。
+5.后续步骤：恭喜你训练了自己的Textual Inversion模型！为了了解如何使用新模型，可以参考以下指南：学习如何加载Textual Inversion嵌入，并将其用作负嵌入；学习如何将Textual Inversion用于Stable Diffusion 1/2和Stable Diffusion XL的推理。
+总：Textual Inversion是一种强大的技术，能够使用少量示例图像对图像生成模型进行个性化训练。通过使用Diffusers库提供的训练脚本，用户可以方便地训练自己的Textual Inversion模型。在训练之前，需要进行环境准备，了解脚本参数和训练脚本的结构。训练完成后，可以将新模型用于推理，并探索其他相关的应用指南。Textual Inversion为个性化图像生成开辟了新的可能性。
+
+DreamBooth
+总:
+本文是Diffusers库中关于DreamBooth训练技术的教程。DreamBooth是一种通过训练少量特定主题或风格的图像来更新整个扩散模型的技术。文章详细介绍了如何使用train_dreambooth.py训练脚本来适应自己的use-case,以及训练过程中的一些技巧和优化方法。
+分:
+1.训练前的准备工作:
+安装Diffusers库
+安装训练脚本所需的依赖
+使用Accelerate库配置训练环境
+准备自己的训练数据集
+2.训练脚本的参数:
+介绍了一些重要的参数,如pretrained_model_name_or_path,instance_data_dir,instance_prompt等
+不同参数的设置会影响训练效果,需要根据实际情况进行调整
+3.Min-SNR加权策略:
+通过重新平衡损失来帮助训练,实现更快的收敛
+在训练命令中添加--snr_gamma参数,推荐值为5.0
+4.Prior preservation loss:
+使用模型自己生成的样本来帮助其学习如何生成更多样化的图像
+通过设置--with_prior_preservation,--prior_loss_weight,--class_data_dir和--class_prompt参数来启用该功能
+5.训练文本编码器:
+除了UNet之外,还可以训练文本编码器以提高生成输出的质量
+需要更大的显存(至少24GB),但可以产生更好的结果,特别是在生成面部图像时
+6.训练脚本的主要组成部分:
+DreamBoothDataset和PromptDataset用于数据预处理和生成提示嵌入
+加载tokenizer、scheduler和模型
+创建训练数据集和DataLoader
+训练循环,包括将图像转换为潜在空间、添加噪声、预测噪声残差和计算损失
+7.启动训练脚本:
+准备训练数据并设置环境变量
+根据GPU性能启用一些优化,如8位Adam优化器和梯度检查点
+开始训练,完成后可以使用训练好的模型进行推理
+8.使用LoRA和Stable Diffusion XL进行训练:
+LoRA可以显著减少可训练参数的数量,加快训练速度并减小模型体积
+Stable Diffusion XL可以生成高分辨率图像,并添加了第二个文本编码器
+总:
+本教程详细介绍了如何使用Diffusers库中的DreamBooth技术对扩散模型进行训练,包括训练前的准备工作、训练脚本的参数设置、一些有助于优化训练效果的技巧(如Min-SNR加权策略、Prior preservation loss和训练文本编码器)、训练脚本的主要组成部分以及如何启动训练脚本。此外,还简要介绍了使用LoRA和Stable Diffusion XL进行训练的方法。通过学习本教程,读者可以了解DreamBooth技术的基本原理和使用方法,并能够根据自己的需求对训练过程进行适当的调整和优化。
+
+Lora
+总:
+本文是Hugging Face的Diffusers库中关于使用LoRA(Low-Rank Adaptation)技术进行文本到图像生成微调训练的教程。LoRA是一种轻量级的参数高效微调技术,可以显著减少需要训练的参数量,加速训练过程并生成更小的模型权重文件。本教程详细讲解了如何修改示例训练脚本以适应你自己的数据集和使用场景,以及如何使用Accelerate库进行多GPU训练。
+分:
+1.LoRA技术简介
+LoRA的工作原理是向模型中注入少量新的 trainable weights,只训练这些新增的参数
+这使得训练速度更快,显存占用更小,训练得到的模型权重文件也很小(通常几百MB),易于存储和分享
+LoRA很通用,可用于DreamBooth、Kandinsky 2.2、Stable Diffusion XL等场景的训练加速
+2.运行训练脚本前的准备工作
+从源码安装最新版本的Diffusers库
+进入examples/text_to_image目录,安装训练脚本所需依赖
+使用Accelerate库初始化多卡训练环境
+制作符合训练脚本要求格式的自定义数据集
+3.训练脚本内容解析
+脚本参数介绍:rank、learning_rate等与LoRA相关的关键参数设置
+训练脚本的数据预处理和训练循环逻辑主要在main()函数中
+重点分析了脚本中LoRA相关的部分:为UNet的每个attention block注入LoRA权重、优化器初始化等
+4.启动训练脚本
+设置必要的环境变量:模型名称、输出目录、推送到Hub的模型名等
+使用accelerate launch命令启动,可配置混合精度、batch size、学习率等超参数
+训练完成后可直接用于推理,或推送保存到Hugging Face Hub上
+5.后续学习建议
+学习如何加载使用社区训练器(如Kohya、TheLastBen等)训练的不同格式LoRA权重
+学习如何使用PEFT库在推理时加载和组合多个LoRA权重
+总结:
+本教程详细介绍了如何使用LoRA技术在Diffusers库中进行文本到图像生成模型的参数高效微调训练。使用LoRA进行训练可以显著提升训练速度和降低资源占用,得到的LoRA权重文件也很小巧易于分享。教程中详细解析了训练脚本的关键组成部分,手把手教你如何将训练脚本适配到自己的数据和使用场景中。通过学习本教程,相信你已经掌握了使用 state-of-the-art 的扩散模型进行高效训练的方法和技巧,可以开始尝试在自己的任务中使用LoRA训练来加速并简化训练过程了。
+
+Custom Diffusion
+总:
+本文是Diffusers库中关于Custom Diffusion训练技术的教程。Custom Diffusion是一种用于个性化图像生成模型的训练技术,它只需要少量样本图片就可以学习新的概念,而且可以同时学习多个概念。本教程主要介绍了如何使用train_custom_diffusion.py脚本来训练自己的Custom Diffusion模型。
+分:
+1.Custom Diffusion 简介
+Custom Diffusion类似于Textual Inversion、DreamBooth和LoRA等技术,只需要少量(4-5张)样本图片就可以对预训练的扩散模型进行微调,使其学会生成特定概念的图像。它的独特之处在于可以通过在cross-attention层中训练权重,同时学习多个概念,并使用特殊词来表示新学习的概念。
+2.环境准备
+在运行train_custom_diffusion.py脚本前,需要从源码安装diffusers库,并安装必要的依赖。此外,还需要使用Accelerate库来帮助在多个GPU/TPU上训练或使用混合精度训练。
+3.脚本参数解析
+训练脚本包含了许多参数,可以帮助自定义训练过程。例如,可以通过--resolution参数改变输入图像的分辨率。此外,还有一些Custom Diffusion特有的参数,如--modifier_token(表示学习概念的特殊词)和--concepts_list(用于学习多个概念,提供包含概念的JSON文件路径)等。
+4.prior preservation loss
+为了防止过拟合,Custom Diffusion在训练时使用模型自己生成的样本来帮助学习生成更多样化的图像。这些生成的样本图片属于与提供的图片相同的类别,有助于模型保留对该类别的学习,并利用已有知识来创作新的图像构图。
+5.Regularization
+Custom Diffusion的训练还包括使用少量真实图像对目标图像进行训练,以防止过拟合。可以使用clip_retrieval下载与目标图像同一类别的200张真实图像,存储在class_data_dir中。
+6.训练脚本解析
+Custom Diffusion训练脚本的很多代码与DreamBooth脚本类似。需要特别关注的是将modifier_token添加到tokenizer中,并调整token embeddings的大小;冻结文本编码器中除token embeddings外的所有参数;以及在cross-attention层中添加Custom Diffusion权重等。
+7.启动训练
+设置好所有参数后,就可以启动训练脚本。训练完成后,可以将训练好的Custom Diffusion模型用于推理,生成指定概念的图像。
+总:
+Custom Diffusion是一种强大的个性化图像生成模型训练技术。本教程详细介绍了如何使用train_custom_diffusion.py脚本来训练自己的Custom Diffusion模型,包括环境准备、脚本参数解析、一些特有的训练技巧(如prior preservation loss和regularization)、训练脚本解析以及如何启动训练等。掌握这些内容,就可以利用Custom Diffusion技术,with only a few example images, 训练出能生成特定概念图像的个性化扩散模型。
+
+Latent Consistency Distillation
+总:
+本文主要介绍了使用Diffusers库中的Latent Consistency Distillation(LCM)方法训练高效的文本到图像模型。LCM能够在几个step内生成高质量图像,大大提升了训练和推理效率。文章详细讲解了LCM的原理、训练脚本的使用方法以及各种训练技巧,是一篇非常实用的教程。
+分:
+1.LCM原理:
+LCM通过在潜在空间上应用单阶段引导蒸馏(one-stage guided distillation)并结合跳步方法(skipping-step method)对任意Stable Diffusion模型进行训练,从而得到更高效的学生模型。
+引导蒸馏能够让学生模型在更少的step下逼近教师模型的效果,而跳步方法通过跳过某些时间步进一步加速训练过程。
+2.训练脚本使用:
+文章详细介绍了train_lcm_distill_sd_wds.py训练脚本的使用方法,包括各种训练参数的设置和脚本各部分的作用。
+重点参数包括教师模型路径(--pretrained_teacher_model)、预训练VAE路径(--pretrained_vae_model_name_or_path)、采样guidance scale范围(--w_min和--w_max)、采样步数(--num_ddim_timesteps)、损失函数类型(--loss_type)等。
+训练过程中的一些优化技巧,如使用混合精度(--mixed_precision)、gradient checkpointing、8-bit Adam optimizer等,能够在节省显存的同时加速训练。
+3.数据集准备和训练循环:
+文章介绍了如何使用WebDataset格式高效地读取和预处理大规模云端数据集。
+训练循环中的关键步骤包括加噪、采样guidance scale、预测去噪结果、计算损失函数并回传梯度等,与标准扩散模型训练类似。
+4.LoRA和Stable Diffusion XL:
+文章还简要介绍了在LCM训练中使用LoRA和Stable Diffusion XL的方法。
+LoRA能够大幅减少可训练参数数量,使得训练更快且模型更小。
+Stable Diffusion XL使用了双text encoder结构,能够生成更高分辨率的图像。
+总:
+通过使用Latent Consistency Distillation方法,我们能够显著提升Stable Diffusion模型的采样速度和效率。文章系统地介绍了LCM的原理和使用Diffusers库进行训练的完整流程,包括各种实用的训练技巧和超参数设置,以及LoRA和Stable Diffusion XL的用法。掌握这些内容,就能够训练出高效、轻量级的文本到图像模型,为更多下游应用提供支持。
+
+Reinforcement learning training with DDPO
+总:
+本文主要介绍了如何使用强化学习中的 DDPO 算法和 🤗 TRL 库及 🤗 Diffusers 库对 Stable Diffusion 模型进行微调,以优化模型的性能。这种方法能够通过奖励函数引导模型生成更加符合预期的结果。
+分:
+1.DDPO 算法:
+DDPO 全称为 Denoising Diffusion Policy Optimization,是由 Black 等人在 "Training Diffusion Models with Reinforcement Learning" 一文中提出的。
+该算法结合了扩散模型和强化学习,通过奖励函数对模型进行优化,使其生成的结果更加符合预期。
+2.🤗 TRL 库:
+🤗 TRL 库实现了 DDPO 算法,提供了 DDPOTrainer 用于训练扩散模型。
+通过使用 🤗 TRL 库,可以方便地对 Stable Diffusion 等扩散模型进行微调,提高模型性能。
+3.🤗 Diffusers 库:
+🤗 Diffusers 库是一个包含各种扩散模型的库,包括 Stable Diffusion。
+结合 🤗 TRL 库和 🤗 Diffusers 库,可以对 Stable Diffusion 模型进行强化学习训练,优化模型性能。
+4.更多信息:
+文章提供了 DDPOTrainer API 参考和 "Finetune Stable Diffusion Models with DDPO via TRL" 博客文章的链接。
+通过查阅这些资料,读者可以更深入地了解如何使用 DDPO 算法和相关库对扩散模型进行微调。
+总:
+本文重点介绍了使用强化学习中的 DDPO 算法和 🤗 TRL 库及 🤗 Diffusers 库对 Stable Diffusion 模型进行微调的方法。通过引入奖励函数,DDPO 算法可以引导模型生成更加符合预期的结果。🤗 TRL 库提供了 DDPO 算法的实现,而 🤗 Diffusers 库则包含了各种扩散模型。结合这两个库,可以方便地对 Stable Diffusion 模型进行强化学习训练,提高模型性能。文章还提供了相关资料的链接,方便读者进一步学习和研究。
+
+
+
+Optimization
+General optimizations
+Speed up inference
+总：本文是Diffusers库教程文档中关于如何优化Diffusers在推理速度方面表现的指南。文章提供了几种有效的优化方法，可以在保证生成图像质量的同时显著提升推理速度，帮助用户更高效地使用Diffusers库。
+分：
+1.使用xFormers或PyTorch 2.0中的torch.nn.functional.scaled_dot_product_attention。这两种方法都能够提供高效的注意力机制实现，在优化速度的同时也能节省显存。文中给出的测试结果表明，使用memory efficient attention可以将生成一张512x512图片的时间从9.50s缩短到2.63s，速度提升了3.61倍。
+2.在支持的CUDA设备上启用TensorFloat-32(TF32)模式。对于安培架构(Ampere)及更新的NVIDIA GPU，TF32能够在矩阵乘法和卷积操作中提供更快的计算速度，同时保持与float32相近的精度。PyTorch默认为卷积启用TF32，但矩阵乘法需要手动设置。在大多数情况下，启用TF32能够显著加速网络推理，且精度损失可以忽略不计。
+3.直接以半精度(float16)加载并运行模型权重。与单精度(float32)相比，半精度能够节省一半的显存，并获得更高的运算速度。在加载模型时，指定torch_dtype=torch.float16即可使用半精度。需要注意的是，在使用Diffusers库的pipeline时，不应该使用torch.autocast，因为它可能导致生成黑色图像，且速度总是慢于纯半精度。
+总：本文重点介绍了三种优化Diffusers推理速度的方法：使用高效注意力实现、启用TF32和采用半精度。这些方法可以在不同层面上提升Diffusers的性能，用户可以根据自己的需求和硬件条件选择适合的优化策略。通过采用文中提到的优化方法，用户能够更高效地利用Diffusers库生成高质量的图像，加速工作流程。
+
+Reduce memory usage
+总：
+本文主要介绍了如何在使用扩散模型时减少内存的使用量。文章提供了多种技术，可以帮助在免费或消费级 GPU 上运行大型模型，并且可以将这些技术结合起来进一步减少内存使用。优化内存或速度通常可以提高另一方面的性能，因此我们应该尽可能同时优化这两个方面。
+分：
+1.Sliced VAE（切片 VAE）：
+通过一次解码一个潜在batch中的图像，Sliced VAE 可以在有限的 VRAM 上解码大型图像批次（32张或更多图像）。如果安装了 xFormers，还可以结合使用 enable_xformers_memory_efficient_attention() 进一步减少内存使用。
+2.Tiled VAE（平铺 VAE）：
+Tiled VAE 通过将图像分割成重叠的块，解码这些块，然后将输出混合在一起以组成最终图像，从而能够在有限的 VRAM 上处理大图像（例如，在 8GB VRAM 上生成 4K 图像）。同样，如果安装了 xFormers，还应该结合使用 enable_xformers_memory_efficient_attention() 进一步减少内存使用。
+3.CPU offloading（CPU 卸载）：
+通过将权重卸载到 CPU，并仅在执行前向传递时在 GPU 上加载它们，可以节省内存。通常，这种技术可以将内存消耗减少到不到 3GB。CPU 卸载在子模块而不是整个模型上工作，这是最小化内存消耗的最佳方式，但由于扩散过程的迭代性质，推理速度要慢得多。
+4.Model offloading（模型卸载）：
+模型卸载是一种替代方法，它将整个模型移动到 GPU，而不是处理每个模型的组成子模块。与将管道移动到 CUDA 相比，它对推理时间的影响可以忽略不计，并且仍然可以节省一些内存。在模型卸载期间，管道的主要组件（通常是文本编码器、UNet 和 VAE）中只有一个放在 GPU 上，而其他组件则在 CPU 上等待。
+5.Channels-last memory format（通道最后内存格式）：
+Channels-last 内存格式是一种替代方式来排列内存中的 NCHW 张量以保留维度顺序。Channels-last 张量的排列方式使得通道成为最密集的维度（存储图像的像素）。由于并非所有算子都支持 channels-last 格式，因此可能会导致性能下降，但您仍然应该尝试并查看它是否适用于您的模型。
+6.Tracing（跟踪）：
+跟踪通过模型运行示例输入张量，并捕获在输入通过模型层时对其执行的操作。返回的可执行文件或 ScriptFunction 使用即时编译进行了优化。
+7.Memory-efficient attention（内存高效注意力）：
+关于优化注意力模块中的带宽的最新工作已经产生了巨大的加速和 GPU 内存使用量的减少。最新类型的内存高效注意力是 Flash Attention。要使用 Flash Attention，需要安装 PyTorch > 1.12、CUDA 和 xFormers，然后在管道上调用 enable_xformers_memory_efficient_attention()。
+总：
+综上所述，本文介绍了多种技术，如 Sliced VAE、Tiled VAE、CPU 卸载、模型卸载、Channels-last 内存格式、跟踪和内存高效注意力，来帮助减少扩散模型的内存使用量。通过合理应用这些技术，即使在免费或消费级 GPU 上，也可以运行一些大型模型。同时，优化内存和速度往往可以相互促进，因此我们应该尽可能同时优化这两个方面，以获得更好的性能。
+
+Pytorch 2.0
+总:
+这篇教程主要介绍了PyTorch 2.0对Diffusers库的优化,通过启用高效注意力实现(Scaled Dot Product Attention, SDPA)和即时编译(torch.compile)两大功能,可以大幅提升Stable Diffusion等扩散模型的推理性能。文中通过详细的性能基准测试,展示了这两项优化在不同GPU和batch size下带来的加速效果。
+分:
+1.高效注意力机制SDPA
+PyTorch 2.0引入了一种内存高效的注意力实现scaled_dot_product_attention,无需额外的依赖如xFormers即可启用。在Diffusers 0.13+版本中,SDPA默认开启。如果要显式启用,可以通过pipe.unet.set_attn_processor(AttnProcessor2_0())来设置。SDPA的速度和内存效率与xFormers相当。如果要切换回原始的注意力实现,可调用pipe.unet.set_default_attn_processor()。
+2.即时编译torch.compile
+torch.compile可以进一步加速PyTorch代码。在Diffusers中,通常建议对UNet模块进行编译,因为它是推理的主要瓶颈。调用torch.compile(pipe.unet)即可启用编译优化。在SDPA的基础上,针对不同GPU,torch.compile可以带来5-300倍的额外加速!编译需要一定时间,因此更适合那些只编译一次就重复执行推理的场景。编译选项的更多细节可参考torch_compile教程。
+3.性能基准测试
+文中在5种常用Diffusion管线上,针对不同GPU(A100/V100/T4/3090/4090)和batch size进行了全面的性能测试。结果表明,在A100上同时启用PyTorch 2.0和torch.compile后,Stable Diffusion的txt2img速度可达到49.74 it/s,是未优化版本(21.66 it/s)的2.3倍。batch size越小,优化带来的加速比越大,因为小batch更受内存带宽限制。不同管线和GPU的加速比各不相同,但整体而言4090、A100等新架构GPU受益最多。
+总:
+PyTorch 2.0通过SDPA和torch.compile两大优化,可显著提升扩散模型推理性能。Diffusers库在最新版本中提供了一键启用这些优化的方法。 通过在不同配置下的基准测试,本教程展示了PyTorch 2.0可为Stable Diffusion等管线带来2-3倍乃至更高的加速比,尤其在新架构GPU和小batch size时优势明显。用户可以根据自己的配置选择适当的优化组合。这些优化使得Diffusion模型更易于实用化部署。
+
+xFormers
+总：
+本文主要介绍了在使用 Diffusers 库时,如何通过安装和使用 xFormers 库来优化推理和训练性能。xFormers 可以加速推理过程,并减少内存消耗,从而提高 Diffusers 库的效率。
+分：
+1.安装 xFormers
+推荐通过 pip 安装 xFormers,安装命令为:pip install xformers
+xFormers 的 pip 包需要最新版本的 PyTorch。如果需要使用之前版本的 PyTorch,建议从源代码安装 xFormers
+安装完成后,可以使用 enable_xformers_memory_efficient_attention() 函数来启用 xFormers,以实现更快的推理和更少的内存消耗
+2.使用 xFormers 加速推理和训练
+xFormers 通过对 attention 块进行优化,可以加速推理过程并减少内存消耗
+在 Diffusers 库中使用 enable_xformers_memory_efficient_attention() 函数可以启用 xFormers 优化
+根据测试,使用 xFormers 可以显著提高 Diffusers 库的推理和训练效率
+3.注意事项
+根据相关 issue 的报告,在某些 GPU 上使用 xFormers v0.0.16 版本进行训练(微调或 DreamBooth)可能会出现问题
+如果遇到此问题,建议按照 issue 评论中的指示安装开发版本的 xFormers
+总结：
+xFormers 是一个强大的工具,可以显著提高 Diffusers 库的推理和训练效率。通过简单的安装和配置,用户可以利用 xFormers 加速 attention 块,减少内存消耗,从而获得更好的性能。然而,在某些特定的 GPU 和 xFormers 版本组合下,可能会遇到训练问题。遇到问题时,可以参考相关 issue 的讨论,尝试安装开发版本的 xFormers 以解决问题。总的来说,xFormers 是优化 Diffusers 库性能的重要工具,值得在使用 Diffusers 库时考虑和尝试。
+
+Token merging
+总:
+本文主要介绍了一种名为 Token Merging (ToMe) 的技术,它可以通过在 Transformer 网络的前向传播过程中,逐步合并冗余的 token 或 patch,从而加速 StableDiffusionPipeline 的推理速度。这项技术在提高推理速度的同时,还能很好地保持生成图像的质量。
+分:
+1.ToMe 的安装和使用方法
+通过 pip 安装 tomesd 库: pip install tomesd
+使用 tomesd.apply_patch() 函数将 ToMe 应用于 StableDiffusionPipeline,其中最重要的参数是 ratio,用于控制前向传播过程中合并的 token 数量。
+2.ToMe 在保持图像质量的同时提高推理速度
+通过增加 ratio 参数,可以进一步加速推理速度,但会以一定的图像质量下降为代价。
+文章使用 Parti Prompts 中的一些提示词对 StableDiffusionPipeline 生成的图像质量进行了测试,结果表明使用 ToMe 后,生成图像的质量没有明显下降。
+3.ToMe 的性能基准测试
+文章在启用 xFormers 的情况下,对不同图像分辨率下的 StableDiffusionPipeline 进行了性能基准测试。
+测试结果表明,使用 ToMe 和 ToMe + xFormers 可以显著提高推理速度,加速效果在较大图像分辨率下更为明显。
+使用 ToMe 后,可以在更高的分辨率(如 1024x1024)下运行 StableDiffusionPipeline,而这在原始管道中是不可能的。
+4.复现实验和性能基准测试的方法
+文章提供了用于复现图像质量实验的脚本。
+文章还提供了用于复现性能基准测试的脚本,并列出了进行测试时的开发环境详情。
+总:
+ToMe 是一项可以显著提高 StableDiffusionPipeline 推理速度的技术,它通过合并冗余的 token 或 patch 来实现加速,同时能够很好地保持生成图像的质量。使用 ToMe 后,StableDiffusionPipeline 可以在更高的图像分辨率下运行,并且加速效果在较大分辨率下更为明显。文章还提供了复现实验和性能基准测试的方法,方便读者进一步探索和验证 ToMe 的性能。
+
+DeepCache
+总:
+DeepCache是一个用于加速StableDiffusionPipeline和StableDiffusionXLPipeline的工具,通过战略性地缓存和重用高级特征,同时利用U-Net架构高效地更新低级特征,从而实现加速效果。
+分:
+1.安装DeepCache
+首先,需要通过pip install DeepCache命令安装DeepCache工具。
+2.加载和启用DeepCacheSDHelper
+导入必要的库后,创建一个StableDiffusionPipeline实例。接着,从DeepCache中导入DeepCacheSDHelper,并创建一个helper实例。使用set_params方法设置cache_interval和cache_branch_id参数。cache_interval表示特征缓存的频率,即每次缓存操作之间的步骤数。cache_branch_id标识负责执行缓存过程的网络分支(从最浅到最深的层排序)。选择较低的cache_branch_id或较大的cache_interval可以以图像质量为代价,提高推理速度。设置参数后,使用enable或disable方法激活或停用DeepCacheSDHelper。
+3.性能基准测试
+在NVIDIA RTX A5000上测试了DeepCache对Stable Diffusion v2.1在不同分辨率、批量大小、缓存间隔(I)和缓存分支(B)配置下的加速效果。结果显示,DeepCache可以在不同配置下提供2-3倍的加速比。
+总:
+DeepCache通过缓存和重用高级特征,并利用U-Net架构更新低级特征,实现了对StableDiffusionPipeline和StableDiffusionXLPipeline的加速。通过调整cache_interval和cache_branch_id参数,可以在推理速度和图像质量之间进行权衡。性能基准测试显示,DeepCache在各种配置下可以提供2-3倍的加速比,证明了其在加速Stable Diffusion模型方面的有效性。
+
+
+Optimized model types
+JAX/Flax
+总：本文主要介绍了如何在 Google Colab 等平台上使用 JAX/Flax 框架和 🤗 Diffusers 库，利用 TPU 加速 Stable Diffusion 模型的推理过程。通过并行计算，在生成同样数量图片的情况下，使用 TPU 可以大幅缩短推理时间。
+分：
+1.环境准备：在使用 JAX/Flax 和 🤗 Diffusers 库之前，需要安装必要的库，如 jax、jaxlib、flax 和 transformers 等。此外，要确保使用的是 TPU 后端，以充分利用 TPU 的并行计算能力。
+2.加载模型：Flax 是一个函数式框架，模型是无状态的，参数存储在模型之外。加载预训练的 Flax pipeline 会返回 pipeline 和模型权重（或参数）。为了提高效率，可以使用 bfloat16 数据类型，它是一种更高效的半精度浮点类型，TPU 支持该类型。
+3.推理过程：TPU 通常有 8 个设备并行工作，因此可以为每个设备使用相同的提示（prompt）。这意味着可以同时在 8 个设备上执行推理，每个设备生成一个图像。因此，在单个芯片生成单个图像所需的时间内，可以获得 8 个图像。
+4.并行化原理：🤗 Diffusers 中的 Flax pipeline 会自动编译模型，并在所有可用设备上并行运行。JAX 并行化可以通过多种方式实现，最简单的方法是使用 jax.pmap 函数来实现单程序多数据（SPMD）并行化。这意味着在不同的数据输入上运行相同代码的多个副本。jax.pmap 函数会编译代码并确保编译后的代码在所有可用设备上并行运行。
+总：本文重点介绍了如何利用 JAX/Flax 和 🤗 Diffusers 库在 TPU 上加速 Stable Diffusion 模型的推理过程。通过并行计算，可以在生成同样数量图片的情况下，大幅缩短推理时间。为了实现这一目标，需要进行必要的环境准备，加载预训练的 Flax pipeline，并充分利用 TPU 的并行计算能力。文中详细解释了推理过程和并行化原理，为读者提供了清晰、全面的指导。
+
+Onnx
+总：本文介绍了如何使用 🤗 Optimum 库与 ONNX Runtime 推理引擎相结合，实现 Stable Diffusion 和 Stable Diffusion XL (SDXL) 模型的高效推理。通过将模型转换为 ONNX 格式，可以显著提升推理速度并降低内存占用，使得在各种设备上部署这些模型变得更加容易。
+分：
+1.安装 🤗 Optimum 库：为了使用 ONNX Runtime 推理引擎，需要安装带有 ONNX Runtime 支持的 🤗 Optimum 库。可以使用命令 pip install -q optimum["onnxruntime"] 进行安装。
+2.使用 Stable Diffusion 模型：
+通过 ORTStableDiffusionPipeline 加载 Stable Diffusion 模型，并将其转换为 ONNX 格式。可以设置 export=True 参数，实现即时转换。
+使用 pipeline() 方法进行推理，传入文本提示，生成相应的图像。
+可以使用 save_pretrained() 方法将转换后的模型保存到本地，方便后续使用。
+对于离线转换，可以使用 optimum-cli export 命令将模型导出为 ONNX 格式，然后再加载使用。
+3.使用 Stable Diffusion XL (SDXL) 模型：
+通过 ORTStableDiffusionXLPipeline 加载 SDXL 模型，无需额外转换步骤。
+使用 pipeline() 方法进行推理，传入文本提示，生成相应的图像。
+同样可以使用 optimum-cli export 命令将 SDXL 模型导出为 ONNX 格式，方便后续使用。
+4.支持的任务：
+Stable Diffusion 模型支持文本到图像（text-to-image）、图像到图像（image-to-image）和图像修复（inpainting）任务。
+SDXL 模型在 ONNX 格式下支持文本到图像和图像到图像任务。
+总：通过使用 🤗 Optimum 库与 ONNX Runtime 推理引擎，可以显著提升 Stable Diffusion 和 SDXL 模型的推理效率。🤗 Optimum 提供了简单易用的接口，使得将这些模型转换为 ONNX 格式变得非常方便。转换后的模型可以直接用于推理，也可以保存到本地以备后续使用。这种方式不仅加快了推理速度，还降低了内存占用，使得在各种设备上部署这些模型变得更加容易。无论是文本到图像、图像到图像还是图像修复任务，都可以通过 🤗 Optimum 与 ONNX Runtime 的结合来实现高效推理。
+
+OpenVINO
+总:
+本文主要介绍了如何使用🤗 Optimum Intel库在OpenVINO平台上运行Stable Diffusion和Stable Diffusion XL (SDXL)模型。通过使用OpenVINO，可以在各种Intel处理器上进行高效的推理。
+分:
+1.安装🤗 Optimum Intel库:
+使用pip安装optimum["openvino"]
+使用--upgrade-strategy eager选项确保使用最新版本
+2.使用Stable Diffusion:
+使用OVStableDiffusionPipeline加载模型
+如果要将PyTorch模型转换为OpenVINO格式，设置export=True
+使用pipeline对象进行推理，生成图像
+保存导出的模型以供将来使用
+3.优化Stable Diffusion推理:
+定义与输入和期望输出相关的形状(batch_size, num_images, height, width)
+使用pipeline.reshape()方法对模型进行静态重塑
+使用pipeline.compile()方法编译模型以进一步加速推理
+4.使用Stable Diffusion XL (SDXL):
+使用OVStableDiffusionXLPipeline加载SDXL模型
+与Stable Diffusion类似，使用pipeline对象进行推理，生成图像
+可以应用与Stable Diffusion相同的优化技巧
+5.支持的任务:
+Stable Diffusion支持文本到图像、图像到图像和图像修复任务
+SDXL支持文本到图像和图像到图像任务
+总:
+通过使用🤗 Optimum Intel库，可以在OpenVINO平台上高效地运行Stable Diffusion和SDXL模型。这样可以利用Intel处理器的性能优势，加速推理过程。文中详细介绍了如何安装库、加载模型、进行推理以及优化推理性能。同时，还提到了这两个模型支持的不同任务类型。通过遵循文中的步骤，用户可以轻松地在OpenVINO上使用Stable Diffusion和SDXL模型，并获得高效的推理性能。
+
+Core ML
+总：
+本文主要介绍了如何使用Core ML在苹果硅芯片设备上运行Stable Diffusion模型。Core ML是苹果官方支持的机器学习模型格式和库，可以充分利用苹果设备上的各种计算引擎，如CPU、GPU和神经引擎(ANE)。通过将Stable Diffusion的PyTorch格式权重转换为Core ML格式，就可以在macOS和iOS/iPadOS原生App中使用这些模型进行推理。
+分：
+1.Stable Diffusion Core ML模型
+Stable Diffusion的权重最初以PyTorch格式存储，需要转换为Core ML格式才能在原生App中使用。苹果工程师基于Hugging Face的diffusers库开发了一个转换工具，可以方便地完成这一转换过程。不过，在进行转换之前，可以先在Hugging Face Hub上搜索是否已经有现成的Core ML格式模型可用。
+2.选择合适的Core ML模型变体
+将Stable Diffusion模型转换为Core ML格式时，可以选择不同的变体以适应不同的使用场景：
+	注意力计算的实现方式：split_einsum专为支持ANE的设备优化，而original则与diffusers库的实现一致，仅支持CPU/GPU。
+	推理框架的支持：packages适用于Python推理代码，而compiled则是Swift代码所需的格式，并且会将UNet模型权重分割为多个文件以兼容iOS/iPadOS设备。
+3.在Python中进行Core ML推理
+首先安装必要的Python库，然后从Hugging Face Hub下载相应的模型权重。使用苹果提供的Python脚本，指定模型路径、运算单元、输出路径和随机种子等参数，即可进行推理。如果使用自定义的模型，还需要用--model-version指定模型在Hub上的ID。
+4.在Swift中进行Core ML推理
+Swift推理的速度比Python更快，因为模型已经以mlmodelc格式预编译好了。使用Python从Hugging Face Hub下载编译好的模型权重，然后用Swift Package Manager运行苹果提供的命令行工具，同样需要指定模型路径、运算单元等参数。
+5.Core ML支持的Diffusers特性
+目前Core ML模型和推理代码并不支持Diffusers库的所有特性，例如只能用于推理而不能进行微调，只支持两种scheduler，还不支持ControlNet等高级功能。苹果的转换和推理代码仓库以及Hugging Face的swift-coreml-diffusers仓库主要是作为技术演示，供其他开发者参考和构建自己的应用。
+总：
+通过将Stable Diffusion模型转换为Core ML格式，并使用苹果提供的转换和推理工具，开发者可以在苹果硅芯片设备上充分利用各种计算资源，实现高效的推理。不过，目前Core ML支持的特性还比较有限，主要是作为一种技术演示。对于开发者而言，可以直接使用Hugging Face开源的Swift仓库作为起点，也可以下载参考Mac App Store中的独立应用。希望开发者能够基于Core ML构建出更多有趣的Stable Diffusion应用。
+
+
+Optimized hardware
+Metal Performance Shaders(MPS)
+总:
+本文主要介绍了如何在搭载了Apple Silicon(M1/M2芯片)的Mac设备上使用Hugging Face的Diffusers库。通过Metal Performance Shaders(MPS)后端,Diffusers可以利用Mac设备上的GPU来加速推理过程。文章提供了详细的环境配置步骤和代码示例,并给出了一些优化技巧和常见问题的解决方案。
+分:
+1.环境要求
+要在Apple Silicon的Mac上运行Diffusers,需要满足以下条件:
+macOS 12.6或更高版本(推荐13.0+)
+安装了arm64版Python
+PyTorch 2.0(推荐)或1.13(mps后端支持的最低版本)
+2.加载模型到MPS设备
+使用PyTorch的.to()方法可以方便地将Stable Diffusion管道移动到Apple Silicon设备上:
+pipe = DiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
+pipe = pipe.to("mps")
+3.启用Attention Slicing
+如果Mac的内存小于64GB,建议启用Attention Slicing以减少内存压力:
+pipe.enable_attention_slicing()
+Attention Slicing把昂贵的Attention操作分多步进行,而不是一次完成,通常可提升约20%的性能。
+4.生成图像
+准备好提示词后,直接调用管道对象就可以生成图像:
+prompt = "a photo of an astronaut riding a horse on mars"
+image = pipe(prompt).images[0]
+注意当前批量生成多个提示词可能会崩溃,建议改用迭代的方式。
+5.PyTorch 1.13的临时方案
+如果使用的是PyTorch 1.13,需要先用一次性的推理"预热"管道,丢弃第一次的结果:
+_ = pipe(prompt, num_inference_steps=1) 
+这是对1.13版本首次推理结果与后续不一致的权宜之计。
+6.常见问题
+M1/M2的性能对内存压力非常敏感。当内存不足时,系统会自动交换,显著降低性能。除了前面提到的Attention Slicing,如果要生成大于512x512分辨率的非标准尺寸图片,也建议启用它。
+总:
+通过合理的环境配置和一些优化技巧,我们可以在配备Apple Silicon的Mac设备上利用MPS后端高效地使用Diffusers库。文中的代码示例展示了如何加载模型,生成图像以及避免常见的陷阱。遵循这些最佳实践,就能充分发挥M1/M2芯片强大的GPU性能,显著加速Stable Diffusion等扩散模型的推理过程。
+
+Habana Gaudi
+总：本文主要介绍了如何使用Hugging Face的Diffusers库在Habana Gaudi硬件上进行Stable Diffusion模型的推理和图像生成。通过使用经过优化的GaudiStableDiffusionPipeline和GaudiDDIMScheduler，并设置适当的参数，可以在Gaudi硬件上高效地生成高质量图像。
+分：
+1.安装：为了在Habana Gaudi硬件上使用Diffusers库，需要先安装SynapseAI和Gaudi驱动程序，然后安装optimum[habana]包。
+2.初始化模型和调度器：使用GaudiStableDiffusionPipeline和GaudiDDIMScheduler分别初始化Stable Diffusion模型和调度器。在初始化管道时，需要设置use_habana=True以在HPU上部署模型，并设置use_hpu_graphs=True以启用HPU图形并获得最快的生成速度。此外，还需要指定一个可以从Hugging Face Hub上的Habana组织下载的GaudiConfig。
+3.生成图像：通过调用pipeline并传入提示文本、每个提示生成的图像数量以及批量大小等参数，可以从一个或多个提示中批量生成图像。
+4.性能基准测试：文章提供了在第一代Gaudi和Gaudi2硬件上使用Stable Diffusion v1.5和v2.1模型生成不同尺寸图像的性能基准测试结果。结果显示，与第一代Gaudi相比，Gaudi2在延迟和吞吐量方面都有显著提升。
+总：Diffusers库提供了一种在Habana Gaudi硬件上高效运行Stable Diffusion模型的方法。通过使用优化的管道和调度器，并适当设置参数，用户可以利用Gaudi硬件的性能优势，快速生成高质量的图像。文章还提供了性能基准测试结果，展示了Gaudi2相对于第一代Gaudi在图像生成任务上的显著改进。对于需要在Habana Gaudi硬件上进行Stable Diffusion推理的用户来说，本文提供了详细的指导和实用的见解。
+
+
+
+Conceptual guides
+Philosophy
+总:
+Diffusers是一个功能强大、设计精良的扩散模型工具箱。它以PyTorch为基础,致力于提供一个模块化的架构,使得开发人员能够方便地进行推理和训练。Diffusers的设计理念主要包括易用性优先、简单优于复杂、易于定制和贡献等,这些理念贯穿于整个库的设计中。
+分:
+1.易用性优先于性能:Diffusers默认加载最高精度和最低优化的模型,以确保跨平台和加速器的可用性。它是一个轻量级的包,具有很少的必需依赖项,但有许多可以提高性能的软依赖项。
+2.简单优于复杂:Diffusers遵循PyTorch的API设计,采用显式优于隐式、简单优于复杂的原则。它提供简洁明了的错误信息,将复杂的模型和调度程序逻辑公开,使用户能够更好地理解和控制去噪过程。
+3.易于定制和贡献:Diffusers采用了与Transformers类似的设计原则,即偏好复制粘贴代码而不是过度抽象。这种设计使得库更易于维护和贡献,因为机器学习是一个快速发展的领域,长期的代码抽象难以定义。
+4.管道(Pipelines):管道被设计为易于使用,但不追求功能完整性。每个管道由不同的模型和调度程序组件组成,遵循单文件策略,并继承自DiffusionPipeline类。
+5.模型(Models):模型被设计为可配置的工具箱,是PyTorch的Module类的自然扩展。每个模型架构在其自己的文件中定义,并可以使用较小的模型构建块。模型应该易于扩展到未来的变化。
+6.调度程序(Schedulers):调度程序负责指导推理的去噪过程以及定义训练的噪声计划。它们被设计为具有可加载配置文件的单独类,并强烈遵循单文件策略。每个调度程序都必须具有set_num_inference_steps和step函数。
+总:
+总的来说,Diffusers库的设计理念体现了易用性、简单性和可扩展性的平衡。它提供了一个模块化的架构,使开发人员能够灵活地进行推理和训练。通过采用单文件策略、显式优于隐式等原则,Diffusers使得代码更易于理解、维护和贡献。同时,它也为未来的发展提供了良好的扩展性。无论是管道、模型还是调度程序,Diffusers都力求在可读性和功能性之间取得平衡,为开发人员提供一个强大而友好的工具箱。
+
+Controlled generation
+总之，这篇文章主要介绍了如何控制扩散模型生成图像的各种技术。这些技术可以帮助我们更好地掌控扩散模型的输出结果，使其更符合我们的需求和期望。
+具体来说，文章提到的控制技术包括：
+1.InstructPix2Pix：通过微调Stable Diffusion模型，使其支持编辑输入图像。它接受一个图像和描述编辑操作的提示作为输入，并输出编辑后的图像。
+2.Pix2Pix Zero：允许将图像中的一个概念或主体转换为另一个，同时保留整体图像语义。它通过引导去噪过程从一个概念嵌入转向另一个概念嵌入来实现。
+3.Attend and Excite：确保提示中的主体在最终图像中得到忠实表现。在去噪过程中，每个主体对应的标记索引都保证至少有一个图像块达到最小关注度阈值。
+4.语义引导(SEGA)：允许从图像中应用或去除一个或多个概念，并控制概念的强度。它通过对概念提示进行引导来实现。
+5.自注意力引导(SAG)：通过从UNet自注意力图中提取高频细节，利用未完全条件化的预测对完全条件化的图像进行引导，从而提高图像的整体质量。
+6.Depth2Image：通过微调Stable Diffusion模型并以原始图像的单目深度估计为条件，更好地保留文本引导图像变化的语义。
+7.MultiDiffusion全景：定义了一个新的生成过程，结合多种扩散生成方法，生成高质量和多样化的图像，同时遵循用户提供的控制，如期望的纵横比和空间引导信号。
+8.DreamBooth：微调模型以教会它新的主体，如利用某人的几张照片生成不同风格的该人物图像。
+9.文本反转：微调模型以教会它新的概念，如利用某种艺术风格的几张图片生成该风格的图像。
+10.ControlNet：一种辅助网络，添加额外的条件控制，如边缘检测、涂鸦、深度图和语义分割等。
+11.提示加权：一种简单技术，对文本输入的某些部分施加更多注意力权重。
+12.自定义扩散：仅微调预训练文本到图像扩散模型的交叉注意力图，支持多概念训练。
+13.模型编辑：帮助缓解预训练文本到图像模型对输入提示中主体的一些错误隐式假设。
+14.DiffEdit：允许在保留原始输入图像的同时，根据输入提示对图像进行语义编辑。
+15.T2I-Adapter：一种辅助网络，添加额外的条件控制，如边缘检测、素描、深度图和语义分割等。
+16.Fabric：一种无需训练的方法，适用于多种流行扩散模型，利用自注意力层以一组反馈图像为条件引导扩散过程。
+总的来说，控制扩散模型生成图像的技术已成为社区积极研究的热点。Diffusers库支持多种前沿的控制技术，可以从不同角度引导模型输出符合特定语义、风格或现实属性的高质量图像。根据具体使用场景，我们可以灵活选择和组合这些技术。大部分技术可直接应用于现有模型，无需重新训练模型权重。这些控制技术极大地提升了扩散模型的可用性和实用性，为生成更加可控、符合需求的图像开辟了广阔前景。
+
+How to contribute?
+总:
+这是一篇关于如何为Diffusers库做出贡献的详尽指南。对于希望参与到Diffusers开发中的开发者来说,这是一份不可多得的参考资料。无论你是修复bug、完善文档,还是贡献新的pipeline、模型和scheduler,这篇指南都能给予详细的指导和建议。Diffusers社区非常欢迎来自各界的贡献,让我们携手共建diffusion模型的美好未来吧!
+分:
+1.贡献前的准备工作
+在正式贡献代码前,你需要做一些准备工作。首先是在GitHub上fork一份Diffusers库的代码,然后把代码克隆到本地。再为你的开发工作创建一个新的分支,并在虚拟环境中安装必要的开发和测试依赖。在修改代码的过程中,要经常运行测试,确保没有引入新的bug。提交代码时,尽量遵循规范,编写清晰的提交信息。最后发起一个pull request,等待维护者的review。
+2.不同类型的贡献方式
+贡献的方式有很多种,你可以从回答问题开始,解答其他开发者在GitHub issues、论坛或Discord上的疑问,提供自己的见解。也可以通过发现和提出bug、提供新feature的想法来间接参与项目。如果你想直接贡献代码,可以先从修复标记为 "Good first issue"的问题开始。完善文档、增加社区pipeline、优化训练示例,也都是非常有价值的贡献。当然,如果你有足够的经验和信心,也可以挑战添加新的pipeline、模型和scheduler。
+3.编写高质量的issue和PR
+无论是创建issue还是提交PR,都要尽量做到描述清晰、信息完整。对于bug,要提供可以复现问题的最小代码片段;对于新feature,要说明动机、用途并给出代码示例。选择合适的issue模板,添加必要的链接和格式,避免发布重复的内容。在提交PR时,要确保通过所有测试,并补充必要的新测试。PR要尽量原子化,集中解决一个问题,不要揉合多个不相关的改动。遵循现有的代码风格和设计模式,不要引入风格上的变化。
+总:
+总的来说,Diffusers是一个社区驱动的开源项目,它的发展离不开所有贡献者的积极参与。这篇贡献指南为开发者提供了一条详尽的参与途径,从回答问题、提出bug和feature,到贡献文档、示例代码、pipeline乃至核心模块,都有切实可行的步骤指导。只要我们每个人都献出自己的一份力量,Diffusers就一定能在diffusion模型领域走得更远。让我们携手共建一个繁荣、进步的Diffusers社区吧!
+
+Diffusers’ Ethical Guidelines
+总：
+随着扩散模型技术的发展和应用日益广泛，Diffusers社区提出了一套道德准则，旨在指导Diffusers库的开发、用户贡献和使用。这些准则着眼于应对该技术可能带来的负面影响，如版权问题、深度伪造、不当内容生成等，同时强调透明、一致、简单、可访问性和可重现性等原则，以促进负责任的技术发展。
+分：
+1.Diffusers社区意识到扩散模型技术可能带来的风险，包括艺术家的版权问题、深度伪造的利用、在不恰当情境下生成色情内容、未经同意的模仿以及对边缘群体产生有害的社会偏见等。因此，制定道德准则以指导技术发展十分必要。
+2.道德准则的适用范围主要针对与道德问题相关的敏感主题，Diffusers社区将在做出技术选择时优先考虑这些准则。同时，这些准则也会随着技术发展和社区反馈而不断调整。
+3.道德准则包括以下几个方面：
+	透明：在管理Pull Requests、向用户解释选择以及做出技术决策时保持透明。
+	一致性：确保为用户提供同等水平的关注，保持项目的技术稳定性和一致性。
+	简单：使Diffusers库易于使用和开发，保持项目目标精简和连贯。
+	可访问性：降低贡献者的门槛，即使没有技术专长也能参与项目，使研究成果更容易被社区访问。
+	可重现性：当通过Diffusers库提供上游代码、模型和数据集时，对其可重现性保持透明。
+	责任：作为一个社区，通过团队合作，我们对用户负有集体责任，要预见并降低该技术可能带来的风险和危害。
+4.Diffusers社区已经实施了一些安全功能和机制，以应对潜在的道德和社会风险，如：
+	社区标签：促进社区讨论和协作。
+	偏差探索和评估：提供交互式展示Stable Diffusion中偏差的空间，支持和鼓励偏差探索和评估。
+	鼓励安全部署：如Safe Stable Diffusion和Safety Checker等，以减轻不当内容生成的问题。
+	分阶段发布：在敏感情况下，限制对某些存储库的访问，使作者能够更好地控制其使用。
+	许可证：如OpenRAIL，在确保自由访问的同时，设置一些限制以确保更负责任的使用。
+总：
+Diffusers社区提出的道德准则体现了其对负责任地发展扩散模型技术的承诺。这些准则强调了透明、一致、简单、可访问性、可重现性和责任等原则，同时提供了一些具体的安全功能和机制，以应对该技术可能带来的道德和社会风险。随着技术的不断发展，这些准则也将与时俱进，以确保Diffusers库的开发和使用能够最大限度地造福社会。
+
+Evaluating Diffusion Models
+总:
+本文主要介绍了如何评估扩散模型的方法,包括定性评估和定量评估两大类。定性评估通常涉及人工评估生成的图像质量,而定量评估则使用一些指标来衡量生成图像的性能。文章重点介绍了几种常用的定量评估指标,并给出了详细的代码示例。
+分:
+1.定性评估
+定性评估通常涉及人工评估生成图像的各个方面,如构图、图像-文本对齐度和空间关系等。常见的定性评估数据集有DrawBench和PartiPrompts,它们提供了一系列的提示词,可用于主观评估不同图像生成模型的性能。
+2.定量评估
+文章重点介绍了以下几种定量评估指标:
+	CLIP score:衡量图像-文本对的兼容性,分数越高表示兼容性越好。
+	CLIP directional similarity:衡量图像在CLIP空间中变化与图像描述变化之间的一致性,用于评估图像编辑任务。
+	FID(Fréchet Inception Distance):衡量两组图像的相似度,通常用于评估生成模型的性能。FID越低,表示生成图像与真实图像越接近。
+文章给出了详细的代码示例,演示了如何使用diffusers库计算以上指标。其中,CLIP score和CLIP directional similarity的计算需要使用CLIP模型提取图像和文本特征,而FID的计算则需要使用预训练的InceptionNet提取图像特征。
+需要注意的是,这些指标都有一些局限性:
+	CLIP score和CLIP directional similarity容易受到CLIP模型本身的影响。
+	如果生成模型在大型图像-文本数据集上预训练,则FID等指标可能不太适用,因为这些指标依赖的InceptionNet可能与大型数据集的重叠度不高。
+	FID对许多因素都很敏感,如所使用的Inception模型版本、计算实现的准确性、图像格式等,因此不同实验之间的FID结果可能难以比较。
+此外,文章还提到,在评估扩散模型时,通常需要在不同的随机种子和推理步数下进行多次评估,并报告平均结果,以减少随机性的影响。
+总:
+综上所述,本文介绍了几种常用的扩散模型评估方法,包括定性评估和定量评估。其中,定量评估指标如CLIP score、CLIP directional similarity和FID等,可以用于衡量生成图像的质量和多样性。但这些指标也有一些局限性,使用时需要谨慎。文章给出了详细的代码示例,演示了如何使用diffusers库计算这些指标,为评估和比较不同的扩散模型提供了参考。
+
+
+
+API
+Main classes
+Configuration
+总:
+本文是关于Diffusers库中ConfigMixin类的介绍。ConfigMixin是所有配置类的基类,它将所有传递给__init__方法的参数存储在一个JSON配置文件中。ConfigMixin类提供了from_config()和save_config()方法,用于加载、下载和保存继承自ConfigMixin的类。理解ConfigMixin类对于使用Diffusers库进行扩散模型训练和推理非常重要。
+分:
+1.ConfigMixin类的作用
+ConfigMixin类是Diffusers库中所有配置类的基类。它的主要作用是将传递给__init__方法的所有参数存储在一个JSON配置文件中。这使得我们可以方便地保存和加载模型及调度器的配置。
+2.ConfigMixin类的属性
+	config_name:配置文件的文件名,在调用save_config()时使用。
+	ignore_for_config:不应保存在配置文件中的属性列表。
+	has_compatibles:该类是否有兼容的类。
+	_deprecated_kwargs:已弃用的关键字参数列表。
+3.load_config()方法
+load_config()方法用于加载模型或调度器的配置。它可以从Hub上的预训练模型加载配置,也可以从本地目录加载使用save_config()保存的配置。load_config()支持多个可选参数,例如指定缓存目录、强制下载、恢复下载等。
+4.from_config()方法
+from_config()方法用于从配置字典实例化Python类。它接受一个配置字典参数config,并返回一个根据配置字典实例化的模型或调度器对象。我们可以使用from_config()方法方便地基于现有的配置创建新的模型或调度器变体。
+5.save_config()方法
+save_config()方法将配置对象保存到指定的目录中,以便稍后可以使用from_config()类方法重新加载。它支持将模型推送到 Hugging Face Hub 进行共享。
+6.其他辅助方法
+	to_json_file():将配置实例的参数保存到JSON文件。
+	to_json_string():将配置实例序列化为JSON格式的字符串。
+总:
+通过对ConfigMixin类的学习,我们了解了它在Diffusers库中的重要作用。ConfigMixin将模型和调度器的参数存储在JSON配置文件中,并提供了方便的方法来加载、保存和实例化配置。这极大地简化了扩散模型的训练和推理流程。在使用Diffusers库时,我们可以利用ConfigMixin提供的功能,轻松地管理和共享模型配置,提高了代码的可读性和可维护性。
+
+Logging
+总:
+本文是Diffusers库的教程文档之一,主要介绍了Diffusers库中的日志系统。Diffusers提供了一个集中式的日志记录系统,使得用户可以轻松管理库的详细程度。通过设置不同的日志等级,用户可以灵活控制Diffusers库的日志输出。
+分:
+1.Diffusers库默认的日志等级为WARNING。用户可以通过以下两种方式来改变日志等级:
+	使用diffusers.logging提供的直接设置方法,例如diffusers.logging.set_verbosity_info()可以将日志等级设置为INFO。
+	设置环境变量DIFFUSERS_VERBOSITY来覆盖默认的日志等级。可选的日志等级包括debug、info、warning、error和critical。
+2.Diffusers库提供了一个logger对象,名为"diffusers",用户可以在自己的模块或脚本中使用相同的logger对象来记录日志。示例代码如下:
+from diffusers.utils import logging
+logging.set_verbosity_info()
+logger = logging.get_logger("diffusers")
+logger.info("INFO")
+logger.warning("WARN")
+3.Diffusers库定义了5个日志等级,按照详细程度从低到高依次为:
+	CRITICAL或FATAL:仅报告最严重的错误,整数值为50。
+	ERROR:仅报告错误,整数值为40。
+	WARNING或WARN:仅报告错误和警告(默认),整数值为30。
+	INFO:报告错误、警告和基本信息,整数值为20。
+	DEBUG:报告所有信息,整数值为10。
+4.默认情况下,在模型下载过程中会显示tqdm进度条。用户可以使用logging.disable_progress_bar()和logging.enable_progress_bar()来禁用或启用此行为。
+5.Diffusers库提供了一些辅助函数,如get_verbosity()用于获取当前日志等级,set_verbosity()用于设置日志等级,enable_explicit_format()用于启用详细的日志格式等。
+总:
+综上所述,Diffusers库提供了一个灵活的日志记录系统,用户可以通过设置不同的日志等级来控制库的日志输出。同时,用户也可以在自己的代码中使用相同的logger对象来记录日志,使日志输出保持一致。Diffusers库还提供了一些辅助函数,方便用户管理和定制日志输出格式。合理利用Diffusers库的日志系统,可以帮助用户更好地了解和调试自己的机器学习项目。
+
+Outputs
+总:
+本文是Diffusers库的教程文档之一,主要介绍了Diffusers库中模型输出的基类BaseOutput以及其几个重要的子类。通过学习这些Output类,我们可以更好地理解和使用Diffusers库的pipeline来生成图像、音频等内容。
+分:
+1.BaseOutput类
+BaseOutput是所有模型输出类的基类,它们都是数据类(dataclass)的子类。
+可以像元组或字典一样访问BaseOutput的属性。如果某个属性在模型输出中没有返回,则会得到None值。
+将BaseOutput对象视为元组时,它只考虑那些非None的属性。可以使用索引访问这些属性。
+可以使用to_tuple()方法将BaseOutput转换为普通的Python元组。
+2.ImagePipelineOutput类
+继承自BaseOutput,用于图像生成pipeline的输出。
+构造函数接受一个images参数,可以是PIL图像列表或numpy数组。
+images参数表示生成的去噪图像,形状为(batch_size, height, width, num_channels)。
+3.FlaxImagePipelineOutput类
+与ImagePipelineOutput类似,用于Flax框架下的图像生成pipeline输出。
+构造函数和images参数与ImagePipelineOutput相同。
+4.AudioPipelineOutput类
+继承自BaseOutput,用于音频生成pipeline的输出。
+构造函数接受一个audios参数,是一个numpy数组。
+audios参数表示生成的去噪音频样本,形状为(batch_size, num_channels, sample_rate)。
+5.ImageTextPipelineOutput类
+继承自BaseOutput,用于图文生成pipeline的输出。
+构造函数接受images和text两个参数。
+images与ImagePipelineOutput中的定义相同。
+text是一个字符串列表,表示生成的文本,长度等于batch_size。也可以是一个二维的字符串列表,其中外层列表长度等于batch_size。
+总:
+通过对Diffusers库中几个主要Output类的学习,我们了解到它们都继承自BaseOutput基类,并根据不同的应用场景(图像、音频、图文等)进行了具体实现。我们可以方便地通过这些Output类的属性来访问模型生成的内容,比如去噪后的图像、音频样本,以及生成的文本等。理解这些Output类的设计和使用,对于利用Diffusers库进行各类跨模态内容生成任务非常有帮助。
+
+
+Loaders
+IP-Adapter
+总:
+本文主要介绍了Diffusers库中的IPAdapterMixin类,该类用于处理IP Adapters。IP Adapter是一种轻量级的适配器,可以通过图像为扩散模型提供提示信息。使用IP Adapter可以将图像和文本特征的交叉注意力层解耦,从而生成更好的图像。
+分:
+1.IPAdapterMixin类
+IPAdapterMixin是一个处理IP Adapters的混入类(Mixin)。通过继承该类,可以方便地为模型添加加载和卸载IP Adapter权重的功能。
+2.load_ip_adapter方法
+load_ip_adapter方法用于加载IP Adapter权重。它接受多个参数:
+	pretrained_model_name_or_path_or_dict:预训练模型的名称、路径或状态字典。可以是Hugging Face Hub上托管的模型ID、包含模型权重的本地目录路径或PyTorch状态字典。
+	cache_dir:下载的预训练模型配置缓存目录(可选)。
+	force_download:是否强制下载模型权重和配置文件,即使已有缓存(可选,默认为False)。
+	resume_download:是否恢复下载模型权重和配置文件(可选,默认为False)。
+	proxies:代理服务器字典(可选)。
+	local_files_only:是否只加载本地模型权重和配置文件(可选,默认为False)。
+	token:用于远程文件的HTTP持有者授权令牌(可选)。
+	revision:要使用的特定模型版本(可选,默认为"main")。
+	subfolder:模型文件在Hub或本地较大模型存储库中的子文件夹位置(可选,默认为"")。
+3.unload_ip_adapter方法
+unload_ip_adapter方法用于卸载已加载的IP Adapter权重,释放内存。使用示例:
+# 假设`pipeline`已加载IP Adapter权重
+pipeline.unload_ip_adapter()
+4.IP Adapter的优势
+使用IP Adapter有以下优点:
+	轻量级:IP Adapter生成的文件仅约100MB。
+	解耦:将图像和文本特征的交叉注意力层解耦,提高了模型的灵活性。
+	提示信息:可以使用图像为扩散模型提供提示,生成更好的图像。
+总:
+IPAdapterMixin类为Diffusers库中的模型提供了方便的IP Adapter处理功能。通过load_ip_adapter方法,可以加载预训练的IP Adapter权重,将图像编码器生成的图像特征与文本特征解耦,从而为扩散模型提供图像提示信息。IP Adapter是一种轻量级适配器,生成的文件仅约100MB,使用起来非常方便。在不需要使用IP Adapter时,可以通过unload_ip_adapter方法卸载权重,释放内存。IP Adapter为图像生成任务提供了更多的灵活性和可能性。
+
+LoRA
+总：
+本文是Diffusers库教程文档中关于LoRA（低秩自适应）的文章，主要介绍了如何使用Diffusers库提供的两个LoRA相关的类——LoraLoaderMixin和StableDiffusionXLLoraLoaderMixin，来加载、保存、融合和管理LoRA权重。LoRA是一种快速轻量级的训练方法，通过插入和训练少量参数来实现对模型的微调，使得模型能够快速学习新的概念。
+分：
+1.LoraLoaderMixin类：
+提供了加载、卸载、融合、禁用等管理LoRA权重的函数。
+可用于任何模型。
+主要函数包括：
+	load_lora_weights：加载LoRA权重到UNet和文本编码器中。
+	save_lora_weights：保存UNet和文本编码器对应的LoRA参数。
+	fuse_lora：将LoRA参数融合到原始参数中。
+	unfuse_lora：撤销LoRA参数的融合。
+	enable_lora_for_text_encoder/disable_lora_for_text_encoder：启用/禁用文本编码器的LoRA层。
+	set_lora_device：将LoRA移动到目标设备。
+	delete_adapters：删除指定名称的LoRA层。
+2.StableDiffusionXLLoraLoaderMixin类：
+继承自LoraLoaderMixin，针对稳定扩散XL模型（Stable Diffusion XL）提供特定的LoRA加载和保存功能。
+重写了load_lora_weights函数，用于加载LoRA权重到SDXL模型中。
+3.加载LoRA权重的方法：
+使用load_lora_weights函数，传入预训练模型的名称、路径或状态字典。
+可以指定adapter_name参数，用于引用加载的LoRA模型。
+加载后的LoRA权重会被插入到UNet和文本编码器中。
+4.保存LoRA权重的方法：
+使用save_lora_weights函数，指定保存目录和UNet及文本编码器对应的LoRA层的状态字典。
+可以设置is_main_process参数，在分布式训练中仅在主进程上保存。
+可以选择使用safetensors或传统的PyTorch方式进行序列化保存。
+总：
+Diffusers库提供了方便的LoRA管理功能，通过LoraLoaderMixin和StableDiffusionXLLoraLoaderMixin类，用户可以轻松地加载、保存、融合和管理LoRA权重。这使得在各种模型上进行LoRA微调变得更加简单和高效。通过合理运用这些功能，用户可以快速地让模型学习新的概念，而无需对整个模型进行重新训练，极大地提高了模型微调的灵活性和效率。
+
+Single files
+总：Diffusers库支持使用FromSingleFileMixin、FromOriginalVAEMixin和FromOriginalControlnetMixin这三个类从单个文件(如ckpt或safetensors)中加载预训练的pipeline、AutoencoderKL和ControlNetModel权重。这为加载社区训练的模型提供了便利。
+分：
+1.FromSingleFileMixin类
+支持从单个ckpt或safetensors文件加载预训练的DiffusionPipeline权重
+pretrained_model_link_or_path参数可以是Hub上文件的链接，也可以是包含所有pipeline权重的本地文件路径
+可通过torch_dtype参数覆盖默认的torch.dtype，使用其他dtype加载模型
+默认情况下，pipeline被设置为评估模式(model.eval())
+2.FromOriginalVAEMixin类
+支持从单个ckpt或safetensors文件加载预训练的AutoencoderKL权重
+pretrained_model_link_or_path参数可以是Hub上文件的链接，也可以是包含所有pipeline权重的本地文件路径
+config_file参数指定与模型关联的配置YAML文件的路径，默认为Stable Diffusion v1推理配置文件
+如果要加载SDXL或Stable Diffusion v2及更高版本的VAE，需要同时传递image_size和scaling_factor参数
+默认情况下，pipeline被设置为评估模式(model.eval())
+3.FromOriginalControlnetMixin类
+支持从单个ckpt或safetensors文件加载预训练的ControlNetModel权重
+pretrained_model_link_or_path参数可以是Hub上文件的链接，也可以是包含所有pipeline权重的本地文件路径
+image_size参数指定模型训练时使用的图像大小，SD v1和SD v2 base使用512，SD v2使用768
+upcast_attention参数控制注意力计算是否总是进行upcast
+默认情况下，pipeline被设置为评估模式(model.eval())
+总：Diffusers库提供了三个Mixin类，方便用户从单个ckpt或safetensors文件加载预训练的pipeline、AutoencoderKL和ControlNetModel权重。这极大地简化了加载社区训练模型的过程。同时，通过设置适当的参数，用户可以灵活地控制加载行为，如指定dtype、配置文件路径、图像大小等。这些Mixin类为在Diffusers中使用社区模型提供了强大的支持。
+
+Textual Inversion
+总:
+本文主要介绍了Textual Inversion(文本倒置)技术在Diffusers库中的应用。Textual Inversion是一种通过少量样本图像来个性化模型的训练方法,可以将新的文本嵌入学习到模型中,生成的文件非常小(几KB),可以方便地加载到文本编码器中。
+分:
+1.Textual Inversion的原理
+Textual Inversion通过学习新的文本嵌入来个性化模型
+只需要少量样本图像就可以进行训练
+生成的嵌入文件非常小,通常只有几KB
+可以方便地加载到文本编码器中使用
+2.TextualInversionLoaderMixin类
+提供了一个函数load_textual_inversion,用于将Textual Inversion嵌入从Diffusers和Automatic1111加载到文本编码器中
+支持加载特殊token来激活嵌入向量
+3.load_textual_inversion函数
+可以加载单个或多个Textual Inversion嵌入
+pretrained_model_name_or_path参数支持多种格式,包括Hub上预训练模型的id、本地目录路径、文件路径、PyTorch状态字典等
+token参数可以覆盖用于Textual Inversion权重的token
+支持指定text_encoder和tokenizer,如果没有指定则默认使用pipeline的内置text_encoder和tokenizer
+4.使用示例
+展示了如何加载Diffusers格式和Automatic1111格式的Textual Inversion嵌入向量
+给出了详细的代码示例,演示了如何使用加载后的嵌入生成图像
+5.其他辅助函数
+maybe_convert_prompt函数:处理包含多个Textual Inversion嵌入向量的prompt
+unload_textual_inversion函数:从StableDiffusionPipeline的文本编码器中卸载Textual Inversion嵌入
+总:
+Textual Inversion是一种强大的个性化模型训练技术,可以通过少量图像样本学习新的文本嵌入,生成定制化的图像。Diffusers库提供了方便的接口和函数来加载和使用Textual Inversion嵌入,可以显著提高StableDiffusion等文图生成模型的灵活性和可用性。通过合理使用Textual Inversion技术,用户可以根据自己的需求对模型进行个性化定制,生成独特而有创意的图像。
+
+UNet
+总:
+上述文章主要介绍了Diffusers库中的UNet2DConditionLoadersMixin类,该类提供了一些实用的函数,用于加载和保存权重、融合和解除LoRA、禁用和启用LoRA以及设置和删除适配器。通过使用这些函数,可以更高效、更灵活地fine-tune和调整UNet模型。
+分:
+1.load_lora_weights函数
+该函数用于将LoRA层加载到UNet2DCondtionModel中。与训练整个模型相比,仅训练模型参数的子集可以更快、更高效。该函数支持从Hub或本地目录加载预训练的模型权重。
+2.delete_adapters函数
+该函数用于从UNet中删除指定名称的适配器的LoRA层。通过调用该函数,可以方便地删除不再需要的适配器。
+3.disable_lora和enable_lora函数
+这两个函数分别用于禁用和启用UNet的活动LoRA层。通过禁用LoRA层,可以暂时停止使用LoRA,而无需删除它们;启用LoRA层则可以重新激活它们。
+4.load_attn_procs函数
+该函数用于将预训练的attention processor层加载到UNet2DConditionModel中。Attention processor层必须在attention_processor.py中定义,并且是torch.nn.Module类。通过加载attention processor层,可以进一步增强UNet的性能。
+5.save_attn_procs函数
+该函数用于将attention processor层保存到指定目录,以便以后使用load_attn_procs函数重新加载。在分布式训练期间,可以使用自定义的保存函数替换torch.save。
+6.set_adapters函数
+该函数用于设置UNet中当前活动的适配器及其权重。通过指定适配器名称和权重,可以灵活地组合和调整多个适配器,以实现所需的效果。
+总:
+综上所述,Diffusers库的UNet2DConditionLoadersMixin类提供了一系列实用函数,用于加载、保存、融合、删除和设置LoRA和attention processor层。通过使用这些函数,用户可以更灵活、高效地fine-tune和调整UNet模型,以满足不同的应用需求。无论是在单机还是分布式训练环境中,这些函数都能发挥重要作用,帮助用户更好地掌控UNet模型的训练和推理过程。
+
+PEFT
+总:
+本文介绍了如何在Diffusers库中使用PEFT (Parameter-Efficient Fine-Tuning) 技术进行高效的微调。PEFT是一种参数高效的微调方法,可以在不增加模型参数量的情况下,对预训练模型进行快速适配。Diffusers库通过PeftAdapterMixin类提供了对PEFT的支持,使得像UNet2DConditionModel这样的模型类可以方便地加载Adapter进行推理和训练。
+分:
+1.PeftAdapterMixin类
+PeftAdapterMixin是Diffusers库中的一个重要类,它包含了所有用于加载和使用PEFT所支持的Adapter权重的函数。通过继承该类,Diffusers中的模型类可以方便地使用PEFT进行参数高效微调。
+2.添加Adapter
+可以通过add_adapter方法向模型中添加新的Adapter进行训练。该方法接受adapter_config参数,表示要添加的Adapter的配置,目前支持非前缀微调(non-prefix tuning)和提示适配(adaption prompt)两种方法。还可以通过adapter_name参数指定Adapter的名称,如果不指定则会使用默认名称。
+3.启用和禁用Adapter
+通过enable_adapters方法可以启用模型中已附加的Adapter,模型会使用active_adapters方法获取要启用的Adapter列表。通过disable_adapters方法可以禁用模型中的所有Adapter,回退到仅使用基础模型进行推理。
+4.设置特定Adapter
+通过set_adapter方法可以设置要使用的特定Adapter,强制模型只使用该Adapter并禁用其他Adapter。该方法接受adapter_name参数,可以是单个Adapter名称,也可以是Adapter名称列表。
+5.获取活跃Adapter列表
+active_adapters方法可以获取模型当前活跃的Adapter列表。
+总:
+PEFT技术可以在不增加模型参数量的情况下,对预训练模型进行快速适配,是一种参数高效的微调方法。Diffusers库通过PeftAdapterMixin类提供了对PEFT的完整支持,包括添加Adapter、启用/禁用Adapter、设置特定Adapter以及获取活跃Adapter列表等功能。这使得在Diffusers库中使用PEFT变得非常方便,可以显著提高模型微调的效率和灵活性。如果你还不熟悉Adapter和PEFT方法,建议仔细阅读PEFT文档以了解更多细节。
+
+
+
+Models
+UNet1DModel
+总:
+本文是Diffusers库的教程文档之一,主要介绍了UNet1DModel模型。UNet最初由Ronneberger等人提出,用于生物医学图像分割,但在Diffusers中也被广泛使用,因为它能输出与输入相同尺寸的图像。UNet是扩散系统中最重要的组件之一,因为它促进了实际的扩散过程。
+分:
+1.UNet1DModel类
+类定义:class diffusers.UNet1DModel
+参数说明:
+	sample_size:样本的默认长度,应在运行时可调。
+	in_channels:输入样本中的通道数。
+	out_channels:输出中的通道数。
+	extra_in_channels:添加到第一个下采样块输入的额外通道数。
+	time_embedding_type:要使用的时间嵌入类型。
+	freq_shift:傅里叶时间嵌入的频率偏移。
+	flip_sin_to_cos:是否将sin翻转为cos进行傅里叶时间嵌入。
+	down_block_types:下采样块类型的元组。
+	up_block_types:上采样块类型的元组。
+	block_out_channels:块输出通道的元组。
+	mid_block_type:UNet中间的块类型。
+	out_block_type:UNet的可选输出处理块。
+	act_fn:UNet块中的可选激活函数。
+	norm_num_groups:归一化的组数。
+	layers_per_block:每个块的层数。
+	downsample_each_block:在不使用上采样的情况下使用UNet的实验性功能。
+2.forward方法
+作用:UNet1DModel的前向传播方法。
+参数:
+	sample:带噪声的输入张量,形状为(batch_size, num_channels, sample_size)。
+	timestep:去噪输入的时间步数。
+	return_dict:是否返回UNet1DOutput而不是普通元组。
+返回:如果return_dict为True,则返回UNet1DOutput,否则返回一个元组,其第一个元素是样本张量。
+3.UNet1DOutput类
+类定义:class diffusers.models.unets.unet_1d.UNet1DOutput
+参数:
+	sample:模型最后一层输出的隐藏状态,形状为(batch_size,num_channels, sample_size)。
+作用:UNet1DModel的输出。
+总:
+综上所述,本文详细介绍了Diffusers库中的UNet1DModel模型,包括其类定义、参数说明、前向传播方法以及输出类UNet1DOutput。UNet在图像分割和生成任务中表现出色,是扩散模型的关键组件。通过调整UNet1DModel的各种参数,可以灵活地适应不同的应用场景。
+
+UNet2DModel
+总:
+UNet2DModel是一个用于图像分割的卷积神经网络模型。它在医学图像分割领域取得了很好的效果,并且在2015年的ISBI挑战赛中取得了第一名的成绩。这个模型的特点是可以在很少的训练样本情况下,通过数据增强的方式充分利用标注数据,实现端到端的训练,并且推理速度很快。
+分:
+1.UNet2DModel的网络结构
+UNet2DModel的网络结构主要由两部分组成:收缩路径(contracting path)和扩张路径(expanding path)。收缩路径主要用来提取图像的上下文信息,而扩张路径则用来精确定位和分割目标区域。
+收缩路径由多个DownBlock2D和AttnDownBlock2D构成,主要作用是对输入图像进行下采样和特征提取。扩张路径由多个AttnUpBlock2D和UpBlock2D构成,主要作用是将特征图上采样到原始分辨率,并与收缩路径中的特征图进行concat,实现精确定位。
+此外,UNet2DModel还引入了一些新的技术,如Attention机制、残差连接、Group Normalization等,进一步提升了模型的性能。
+2.UNet2DModel的输入输出
+UNet2DModel的输入是一个带噪声的图像样本和一个时间步长,输出是一个与输入大小相同的去噪后的图像样本。时间步长可以是一个标量值,也可以是一个向量,用于指定去噪的步数。
+除了图像样本和时间步长,UNet2DModel还支持一些可选的输入,如类别标签、中间块的比例因子等,可以根据具体的应用场景进行设置。
+3.UNet2DModel的训练和推理
+UNet2DModel的训练过程主要分为两个阶段:正向传播和反向传播。在正向传播阶段,输入图像样本和时间步长首先被编码成隐向量,然后通过UNet2DModel的收缩路径和扩张路径得到输出的去噪图像样本。在反向传播阶段,通过比较输出图像和真实图像的差异,计算损失函数,并利用梯度下降算法更新模型参数,直到模型收敛。
+UNet2DModel的推理过程与训练过程类似,只是不需要反向传播和参数更新。给定一个带噪声的输入图像和时间步长,UNet2DModel可以快速生成一个去噪后的输出图像,实现图像分割或其他任务。
+总:
+UNet2DModel是一个功能强大的图像分割模型,通过引入Attention机制、残差连接等技术,在医学图像分割任务上取得了很好的效果。它可以在很少的训练样本情况下,通过数据增强的方式充分利用标注数据,实现端到端的训练,并且推理速度很快。UNet2DModel的网络结构由收缩路径和扩张路径组成,分别用于提取图像的上下文信息和精确定位目标区域。此外,UNet2DModel还支持多种可选的输入,如类别标签等,可以根据具体的应用场景进行灵活配置。
+
+UNet2DConditionModel
+总:
+UNet2DConditionModel是diffusers库提供的一个重要的条件2D UNet模型。它最初由Ronneberger等人提出用于生物医学图像分割,但在扩散模型中也被广泛使用。作为扩散系统的关键组件之一,UNet2DConditionModel促进了实际的扩散过程。本文将详细介绍UNet2DConditionModel的架构细节、各种配置选项以及如何使用它。
+分:
+1.UNet2DConditionModel的架构
+UNet2DConditionModel由一个压缩路径(contracting path)和一个对称扩张路径(expanding path)组成。压缩路径用于捕获上下文信息,而扩张路径则实现了精确定位。UNet2DConditionModel接受一个带噪声的样本、条件状态和时间步长作为输入,并返回一个与输入大小相同的样本。
+2.UNet2DConditionModel的配置选项
+UNet2DConditionModel提供了大量的配置选项,以适应不同的使用场景。例如:
+	sample_size:输入/输出样本的高度和宽度
+	in_channels:输入样本的通道数
+	out_channels:输出的通道数
+	down_block_types和up_block_types:指定下采样和上采样模块使用的类型
+	block_out_channels:每个块的输出通道数
+	layers_per_block:每个块中的层数
+	attention_head_dim和num_attention_heads:注意力头的维度和数量
+	还有许多其他选项可以进一步定制模型的架构和行为。
+3.使用UNet2DConditionModel
+通过实例化UNet2DConditionModel并调用其forward()方法,可以轻松使用该模型。forward()接受noisy_sample、timestep、encoder_hidden_states等参数,并返回经过去噪的样本。除了基本的前向传播,UNet2DConditionModel还提供了一些实用的方法,例如:
+	enable_freeu()和disable_freeu():启用或禁用FreeU机制以提升生成质量
+	set_attn_processor():设置用于计算注意力的处理器
+	set_attention_slice():启用切片注意力以节省内存
+4.FlaxUNet2DConditionModel
+除了PyTorch版本,diffusers库还提供了UNet2DConditionModel的Flax版本,名为FlaxUNet2DConditionModel。它继承自FlaxModelMixin,支持Flax的各种功能,如JIT编译、自动微分、矢量化和并行化。使用方式与PyTorch版本类似。
+总:
+UNet2DConditionModel是一个功能强大且灵活的条件UNet模型,在扩散模型中扮演着至关重要的角色。通过其精心设计的架构和丰富的配置选项,UNet2DConditionModel能够适应各种使用场景。无论您是使用PyTorch还是Flax,diffusers库都提供了易于使用的API,让您能够轻松地将UNet2DConditionModel集成到您的扩散系统中。充分了解和利用UNet2DConditionModel的特性,将有助于您构建高质量的图像生成模型。
+
+UNet3DConditionModel
+总:
+U-Net是一种广泛应用于生物医学图像分割和扩散模型的卷积神经网络架构。本文介绍了U-Net的基本结构,重点讲解了Diffusers库中实现的3D条件U-Net模型UNet3DConditionModel。
+分:
+1.U-Net网络结构
+U-Net由收缩路径(下采样)和对称的扩张路径(上采样)组成,可以在很少训练样本的情况下端到端训练,实现精确定位。
+下采样路径用于捕获上下文信息,上采样路径支持精确的定位。
+整个网络可以很快地对图像进行分割,在GPU上处理一张512x512的图像用时不到1秒。
+2.Diffusers库中的UNet3DConditionModel
+这是一个3D条件U-Net模型,以带噪声的样本、条件状态和时间步长作为输入,输出与输入大小相同的样本。
+模型包含多个可配置的参数,如下采样/上采样块类型、每个块的输出通道数、注意力头维度等。
+提供了enable_freeu方法启用FreeU机制,通过缩放因子调整跳跃连接和主干特征的贡献,以改善生成质量。
+支持前向分块(enable_forward_chunking)和切片注意力计算(set_attention_slice)等功能,用于节省显存。
+可以通过set_attn_processor方法设置自定义的注意力处理器。
+3.UNet3DConditionOutput
+这是UNet3DConditionModel的输出类,包含了以encoder_hidden_states为条件的隐藏状态输出,形状为(batch_size, num_frames, num_channels, height, width)。
+总:
+U-Net和UNet3DConditionModel在生物医学图像分割和扩散模型中有广泛的应用。UNet3DConditionModel提供了灵活的配置选项和优化技术,如FreeU、前向分块和切片注意力,以改善生成质量和节省资源。通过深入理解U-Net结构和UNet3DConditionModel的功能,用户可以更好地应用该模型解决实际问题。
+
+UNetMotionModel
+总：
+本文介绍了UNet模型在医学图像分割和Diffusers中的应用。UNet由Ronneberger等人提出，最初用于生物医学图像分割，但在Diffusers中也很常用，因为它输出与输入大小相同的图像。UNet是扩散系统中最重要的组成部分之一，因为它促进了实际的扩散过程。
+分：
+1.UNet模型结构
+UNet由收缩路径（contracting path）和对称扩张路径（expanding path）组成。收缩路径用于捕获上下文信息，而扩张路径则实现精确定位。这种结构使得UNet即使在训练样本很少的情况下，也能通过端到端训练实现良好性能。
+2.UNet在医学图像分割中的应用
+UNet在ISBI神经结构分割挑战赛中表现优于之前最好的方法（滑动窗口卷积网络）。此外，相同的网络在ISBI 2015的细胞跟踪挑战赛的两个最具挑战性的透射光显微镜类别（相差显微镜和DIC显微镜）中大幅领先。
+3.UNet在Diffusers中的应用
+Diffusers库中有几种UNet模型的变体，取决于其维度以及是否为条件模型。本文介绍的是一个2D UNet模型（UNetMotionModel），它接受嘈杂样本、条件状态和时间步长，并返回与样本形状相同的输出。
+4.UNetMotionModel的关键方法
+enable_freeu：启用FreeU机制，通过缩放因子调整跳跃连接和主干特征的贡献，以减轻"过度平滑效应"。
+forward：UNetMotionModel的前向传播方法，接受嘈杂输入张量、时间步长、编码器隐藏状态等参数，返回样本张量或UNet3DConditionOutput。
+freeze_unet2d_params：冻结UNet2DConditionModel的权重，而保持运动模块未冻结，以进行微调。
+5.UNet3DConditionOutput
+UNet3DConditionModel的输出，包含以编码器隐藏状态为条件的隐藏状态输出。
+总结：
+UNet模型在医学图像分割和Diffusers中都有广泛应用。其独特的结构使其能够在训练样本较少的情况下实现出色的性能。在Diffusers库中，UNetMotionModel是一个重要的组成部分，它接受嘈杂样本、条件状态和时间步长，并返回与输入大小相同的输出。通过使用enable_freeu方法，可以进一步优化模型性能。总的来说，UNet模型展示了卷积网络在生物医学图像分割和扩散模型中的强大能力。
+
+UViT2DModel
+总：
+本文介绍了U-ViT (Universal Vision Transformer)模型,这是一种基于Vision Transformer (ViT)和UNet结构的图像生成模型。U-ViT在标准扩散模型的基础上进行了一些改进,以适应高分辨率图像的生成任务,同时保持模型结构的简洁性。
+分：
+1.U-ViT模型结构
+U-ViT模型继承了ViT将输入视为一系列tokens的思路,并结合了UNet的跳跃连接(skip connection)以实现像素级特征的预测。模型最后还添加了一个3x3卷积块以提升生成图像的质量。
+2.训练高分辨率扩散模型的四点发现
+(1)对高分辨率图像应调整噪声计划(noise schedule);
+(2)只需要扩展模型结构的特定部分;
+(3)在架构的特定位置添加dropout;
+(4)下采样是避免高分辨率特征图的有效策略。
+3.Diffusers库中的U-ViT实现
+UVit2DModel类是U-ViT模型的主体,包含了模型的主要参数和方法。
+set_attn_processor方法可设置注意力处理器,以计算模型中的注意力。
+UVit2DConvEmbed、UVitBlock、ConvNextBlock和ConvMlmLayer是U-ViT模型中使用的一些子模块,分别实现了嵌入层、transformer block、ConvNext block和MLM层。
+总结：
+U-ViT是一种用于图像生成的transformer模型,在标准扩散模型的基础上融合了ViT和UNet的特点,并针对高分辨率图像生成任务进行了优化。通过调整噪声计划、扩展模型特定部分、添加dropout和采用下采样策略,U-ViT在不引入额外复杂度的情况下,在ImageNet数据集上实现了扩散模型的最佳性能。Diffusers库提供了U-ViT模型的PyTorch实现,方便研究者和开发者使用和改进该模型。
+
+VQModel
+总:
+本文介绍了VQ-VAE(Vector Quantised-Variational AutoEncoder)模型在Diffusers库中的应用。VQ-VAE是一种用于学习离散表示的生成模型,与VAE(Variational AutoEncoder)有所不同。它通过将编码器网络输出离散编码而不是连续编码,并学习先验分布而不是使用静态先验分布,来学习离散的潜在表示。VQ-VAE能够生成高质量的图像、视频和语音,在说话人转换和语音学习等任务中表现出色。
+分:
+1.VQ-VAE与VAE的区别
+编码器网络输出离散编码,而不是连续编码
+先验分布是学习得到的,而不是静态的
+2.VQ-VAE中的关键技术
+使用vector quantisation(VQ)方法来学习离散的潜在表示,避免了VAE框架中通常出现的"后验坍缩"问题
+将学习到的表示与自回归先验相结合,可以生成高质量的图像、视频和语音
+3.VQModel类的重要参数
+	in_channels和out_channels:输入和输出图像的通道数
+	down_block_types和up_block_types:下采样和上采样模块的类型
+	block_out_channels:每个模块的输出通道数
+	num_vq_embeddings:VQ-VAE中codebook向量的数量
+	vq_embed_dim:VQ-VAE中codebook向量的隐藏维度
+	scaling_factor:用于缩放潜在空间以具有单位方差的标准差
+4.VQModel的前向传播
+输入为sample(torch.FloatTensor),表示输入样本
+返回VQEncoderOutput(包含最后一层模型的编码输出样本)或元组
+总:
+VQ-VAE通过学习离散的潜在表示,克服了VAE框架中的"后验坍缩"问题,能够生成高质量的图像、视频和语音。Diffusers库中的VQModel类实现了VQ-VAE模型,可以将潜在表示解码为图像。通过设置不同的参数,如下采样和上采样模块的类型、codebook向量的数量和隐藏维度等,可以调整VQ-VAE模型的性能。VQModel的前向传播以输入样本为参数,返回编码后的输出样本或元组。
+
+AutoencoderKL
+总:
+本文主要介绍了Diffusers库中的AutoencoderKL模型。AutoencoderKL是一种变分自编码器(VAE)模型,用于将图像编码为潜在表征,并将潜在表征解码为图像。这个模型在Diffusers中被用来实现图像到图像的翻译任务。
+分:
+1.AutoencoderKL模型概述
+AutoencoderKL模型是一种VAE模型,它通过最小化重构误差和KL散度来学习图像数据的紧凑表征。模型主要由编码器和解码器两部分组成。编码器将输入图像编码为潜在空间中的一个分布(通常是高斯分布),解码器则从这个分布中采样潜在向量,并将其解码为输出图像。
+2.模型的输入和输出
+AutoencoderKL的输入是一个形状为(batch_size, num_channels, height, width)的图像张量,输出则是重构后的图像。编码器的输出是DiagonalGaussianDistribution类型,表示潜在空间的分布参数(均值和对数方差)。这种分布允许从潜在空间中采样向量。
+3.模型的配置参数
+AutoencoderKL有许多可配置的参数,例如:
+	in_channels和out_channels:指定输入和输出图像的通道数。
+	down_block_types和up_block_types:指定下采样和上采样块的类型。
+	block_out_channels:指定每个块的输出通道数。
+	latent_channels:指定潜在空间的维度。
+	sample_size:指定在训练期间使用的图像尺寸。
+	scaling_factor:指定用于潜在空间归一化的比例因子。
+4.潜在空间操作
+AutoencoderKL允许对潜在表征执行各种操作,例如潜在空间插值和采样。潜在空间通常是高斯分布,这使得采样和插值变得简单。为了确保潜在空间是各向同性的,通常使用scaling_factor参数对潜在向量进行归一化。
+5.Flax版本的AutoencoderKL
+Diffusers库还提供了AutoencoderKL的Flax版本,名为FlaxAutoencoderKL。Flax是一个基于JAX的神经网络库,支持JIT编译、自动微分和高效的并行化。FlaxAutoencoderKL的接口和功能与PyTorch版本基本相同。
+总:
+总的来说,AutoencoderKL是Diffusers库中的一个重要模型,用于学习图像数据的压缩表征。通过配置不同的参数,AutoencoderKL可以适应不同的任务和数据集。此外,Diffusers库还提供了AutoencoderKL的Flax版本,可以利用JAX的高性能计算能力。了解AutoencoderKL的原理和使用方法,对于图像生成和编辑任务非常重要。
+
+AsymmetricAutoencoderKL
+总:本文主要介绍了一种改进的变分自动编码器(VAE)模型AsymmetricAutoencoderKL,用于提升StableDiffusion的图像修复(inpainting)性能。这个新模型通过在解码器中引入条件分支以及扩大解码器容量,在保持文本到图像生成能力的同时,显著改善了图像修复和编辑效果。
+分:
+1.AsymmetricAutoencoderKL的两个核心设计:
+解码器除了编码器的输入外,还加入了一个条件分支,用于处理图像操作任务的条件输入,如inpainting中未被遮罩的图像区域
+解码器规模显著大于编码器,以更好地恢复量化编码的细节,而推理开销仅略微增加
+2.训练AsymmetricAutoencoderKL的优势:
+训练成本低,只需重新训练一个新的不对称解码器,保持原有的VQGAN编码器和StableDiffusion不变
+可广泛用于基于StableDiffusion的图像修复和局部编辑方法中
+3.实验结果表明AsymmetricAutoencoderKL可以:
+显著改善图像修复和编辑性能
+同时保持原有的文本到图像生成能力
+4.代码已开源,可在Hugging Face上获取不同规模(base、1.5倍、2倍解码器)的预训练模型权重
+5.使用示例展示了如何将AsymmetricAutoencoderKL轻松集成到StableDiffusionInpaintPipeline中进行图像修复
+总:AsymmetricAutoencoderKL通过解码器条件分支和容量扩充,巧妙地改进了VQGAN在图像修复任务中的表现,同时继承了原模型优秀的文本到图像生成能力。这种简单有效的设计思路,有望启发出更多增强VQGAN和StableDiffusion的新方法。开源的代码和模型为研究者和开发者提供了很好的基础,促进相关研究的快速发展和实际应用的部署。
+
+Tiny AutoEncoder
+总:
+本文主要介绍了Tiny AutoEncoder for Stable Diffusion (TAESD)这一模型。它是由Ollin Boer Bohan提出的Stable Diffusion的VAE的一个小型蒸馏版本,可以快速解码StableDiffusionPipeline或StableDiffusionXLPipeline中的潜在表示。文章详细说明了如何在Stable Diffusion v-2.1和Stable Diffusion XL 1.0中使用TAESD,并介绍了AutoencoderTiny类及其主要方法。
+分:
+1.在Stable Diffusion v-2.1中使用TAESD:
+首先导入torch和DiffusionPipeline, AutoencoderTiny
+使用DiffusionPipeline.from_pretrained()加载stable-diffusion-2-1-base模型,并指定torch_dtype=torch.float16
+使用AutoencoderTiny.from_pretrained("madebyollin/taesd", torch_dtype=torch.float16)加载TAESD模型替换原有的VAE
+将pipeline移动到CUDA设备上
+提供prompt并生成图像
+2.在Stable Diffusion XL 1.0中使用TAESD的步骤与上述类似,只是加载的模型不同:
+使用DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float16)加载stable-diffusion-xl-base-1.0模型
+使用AutoencoderTiny.from_pretrained("madebyollin/taesdxl", torch_dtype=torch.float16)加载TAESD模型
+3.AutoencoderTiny类:
+是对TAESD原始实现的包装,继承自ModelMixin
+主要参数包括:输入输出通道数,编码器和解码器各层输出通道数,激活函数,潜在表示通道数,上采样缩放因子等
+主要方法包括:
+	disable_slicing():禁用切片VAE解码
+	disable_tiling():禁用平铺VAE解码
+	enable_slicing():启用切片VAE解码,以节省内存并允许更大的批量大小
+	enable_tiling():启用平铺VAE解码,以节省大量内存并处理更大的图像
+	forward():模型前向传播
+	scale_latents():将原始潜在表示缩放到[0,1]
+	unscale_latents():将[0,1]缩放回原始潜在表示
+4.AutoencoderTinyOutput类:
+AutoencoderTiny编码方法的输出
+参数latents表示编码器的编码输出
+总:
+TAESD是一种小型且高效的VAE模型,可用于Stable Diffusion系列模型。它可以快速解码潜在表示,节省内存并处理更大的图像。通过替换原有的VAE,我们可以在Stable Diffusion v-2.1和Stable Diffusion XL 1.0中轻松使用TAESD。AutoencoderTiny类提供了许多有用的方法,如切片解码、平铺解码等,使其成为扩散模型的理想选择。
+
+ConsistencyDecoderVAE
+总:
+本文主要介绍了Diffusers库中的ConsistencyDecoderVAE类。这个类实现了一种称为Consistency Decoder的变分自编码器(VAE),可用于StableDiffusionPipeline中对潜在表征进行解码。Consistency Decoder最初在DALL-E 3的技术报告中提出。
+分:
+1.ConsistencyDecoderVAE类的初始化参数
+scaling_factor:缩放因子,默认为0.18215
+latent_channels:潜在空间通道数,默认为4
+encoder和decoder的多个参数:用于配置编码器和解码器的结构,如块输出通道数、下采样/上采样块类型、层数等
+2.ConsistencyDecoderVAE的主要方法
+enable_slicing():启用切片解码,将输入张量切片以多步计算解码,节省内存
+enable_tiling():启用平铺解码,将输入张量平铺以多步计算解码和编码,可处理更大图像
+forward():执行VAE的前向传播
+tiled_encode():使用平铺编码器对图像批次编码
+3.使用示例
+vae = ConsistencyDecoderVAE.from_pretrained("openai/consistency-decoder", torch_dtype=torch.float16)
+pipe = StableDiffusionPipeline.from_pretrained(
+    "runwayml/stable-diffusion-v1-5", vae=vae, torch_dtype=torch.float16
+).to("cuda")
+pipe("horse", generator=torch.manual_seed(0)).images  
+首先加载预训练的ConsistencyDecoderVAE模型,然后将其作为VAE传递给StableDiffusionPipeline,最后用prompt生成图像。
+4.其他要点
+目前只支持2次迭代的推理
+平铺编码可生成与非平铺不同的结果,因为每个tile使用不同编码器,但通过重叠和混合可以得到平滑输出
+set_attn_processor()方法可设置用于计算注意力的处理器
+总:
+Consistency Decoder是一种新型VAE,通过切片解码和平铺编码等技术,在节省内存的同时支持处理更大尺寸图像。将其集成到stable diffusion pipeline中,有望生成质量更高、分辨率更大的图像。不过使用时需要注意平铺编码与标准编码结果的差异。总的来说,ConsistencyDecoderVAE为图像生成任务带来了新的可能性。
+
+Transformer2D
+总:
+本文是Diffusers库中关于Transformer2D模型的教程文档。Transformer2D是一种基于Vision Transformer的模型,用于处理图像类数据。该模型可接受离散(矢量嵌入的类)或连续(实际嵌入)输入。文中详细介绍了Transformer2D的模型结构、输入处理方式以及前向传播过程。
+分:
+1.Transformer2D模型结构
+基于Dosovitskiy等人提出的Vision Transformer
+接受离散(矢量嵌入的类)或连续(实际嵌入)输入
+包含多个Transformer块,块数由num_layers参数决定
+使用多头注意力机制,头数由num_attention_heads参数决定
+2.输入处理方式
+连续输入:将输入投影并重塑为(batch_size, sequence_length, feature_dimension),然后应用Transformer块,最后重塑为图像
+离散输入:假设输入类别之一是被掩码的潜在像素。将输入(潜在像素的类)转换为嵌入并应用位置嵌入,然后应用Transformer块,最后预测未噪声图像的类别
+3.前向传播过程
+forward方法接受hidden_states、encoder_hidden_states、timestep等参数
+hidden_states:如果是离散的,形状为(batch size, num latent pixels);如果是连续的,形状为(batch size, channel, height, width)
+encoder_hidden_states:用于交叉注意力层的条件嵌入,如果未给出,交叉注意力默认为自注意力
+timestep:用于指示去噪步骤,可选的时间步长会在AdaLayerNorm中作为嵌入应用
+返回Transformer2DModelOutput,包含根据encoder_hidden_states条件生成的hidden_states输出
+总:
+Transformer2D是一种强大的图像处理模型,通过将Transformer应用于图像数据,实现了对图像的理解和生成。该模型灵活地处理离散和连续输入,并支持多种条件,如时间步长和类别标签。通过调整模型参数,如层数和注意力头数,可以适应不同的任务需求。Transformer2D为图像生成和编辑任务提供了一种新的思路。
+
+Transformer Temporal
+总:
+本文介绍了Diffusers库中的TransformerTemporalModel类,该模型是一种用于处理类似视频数据的Transformer模型。文章详细介绍了TransformerTemporalModel的构造函数参数、forward方法以及输出类TransformerTemporalModelOutput。
+分:
+1.TransformerTemporalModel类的构造函数:
+num_attention_heads:多头注意力机制中的头数,默认为16。
+attention_head_dim:每个注意力头的通道数,默认为88。
+in_channels:输入和输出的通道数(如果输入是连续的,则需指定)。
+num_layers:Transformer块的层数,默认为1。
+dropout:dropout概率,默认为0.0。
+cross_attention_dim:用于交叉注意力层的编码器隐藏状态维度数。
+attention_bias:配置TransformerBlock注意力是否应包含偏置参数。
+sample_size:潜在图像的宽度(如果输入是离散的,则需指定)。在训练过程中,这是固定的,因为它用于学习位置嵌入的数量。
+activation_fn:前馈网络中使用的激活函数,默认为"geglu"。
+norm_elementwise_affine:配置TransformerBlock是否应使用可学习的逐元素仿射参数进行归一化。
+double_self_attention:配置每个TransformerBlock是否应包含两个自注意力层。
+positional_embeddings:在将序列输入传递给使用之前应用的位置嵌入的类型。
+num_positional_embeddings:应用位置嵌入的序列的最大长度。
+2.TransformerTemporalModel的forward方法:
+hidden_states:输入的隐藏状态,如果是离散的,则为形状为(batch size, num latent pixels)的LongTensor;如果是连续的,则为形状为(batch size, channel, height, width)的FloatTensor。
+encoder_hidden_states:用于交叉注意力层的条件嵌入,如果未给定,则交叉注意力默认为自注意力。
+timestep:用于指示去噪步骤的可选时间步长,可以作为AdaLayerNorm中的嵌入应用。
+class_labels:用于指示类别标签调节的可选类别标签,可以作为AdaLayerZeroNorm中的嵌入应用。
+num_frames:每批要处理的帧数,用于重塑隐藏状态,默认为1。
+cross_attention_kwargs:一个kwargs字典,如果指定,则沿着AttentionProcessor传递,如在diffusers.models.attention_processor下的self.processor中定义。
+return_dict:是否返回UNet2DConditionOutput而不是普通元组,默认为True。
+3.TransformerTemporalModelOutput类:
+sample:输出的隐藏状态,以encoder_hidden_states输入为条件,形状为(batch_size x num_frames, num_channels, height, width)的FloatTensor。
+总:
+TransformerTemporalModel是一个用于处理类似视频数据的Transformer模型,它提供了灵活的配置选项,如多头注意力、交叉注意力、位置嵌入等。通过调整构造函数参数,可以定制模型以适应不同的任务需求。forward方法接受各种输入,如隐藏状态、条件嵌入、时间步长和类别标签,并返回经过条件化的输出隐藏状态。TransformerTemporalModelOutput类封装了模型的输出,便于进一步处理和分析。
+
+Prior Transformer
+总之,PriorTransformer 是 Hierarchical Text-Conditional Image Generation with CLIP Latents这篇论文中提出的一个重要模型,用于根据给定的文本embedding生成对应的图像embedding。它利用了CLIP学到的语义信息丰富的图文表征,通过一个两阶段的方法 - PriorTransformer生成CLIP图像embedding,然后Decoder根据图像embedding生成图像,从而实现了高质量、具备语义和风格信息的文本到图像生成。
+具体来说,PriorTransformer的关键点如下:
+1.模型结构:PriorTransformer本质上是一个Transformer模型,主要由若干个TransformerBlock组成。每个block包含多头注意力机制和前馈网络。模型的输入是CLIP文本embedding,输出是预测的CLIP图像embedding。
+2.Embedding处理:模型除了基本的文本和图像embedding外,还引入了一些额外的embedding,比如表示denoising步骤的time step embedding,以及表示文本图像相关性的额外token embedding。这些embedding会与原始输入concat在一起作为模型的输入。
+3.可配置性:PriorTransformer的各种参数,如注意力头数、隐藏层维度、层数、dropout率等都是可配置的,方便针对不同任务进行调优。此外还可以灵活配置模型的一些组件,如layer norm的位置、encoder hidden state的映射方式等。
+4.Denoising过程:生成图像embedding的过程被建模为一个denoising过程。模型每次根据当前预测的图像embedding、CLIP文本embedding以及当前denoising步骤,预测噪声较小一点的图像embedding,经过多个步骤逐渐去除噪声,得到最终的干净图像embedding。
+5.灵活的Attention处理:PriorTransformer允许通过set_attn_processor方法设置自定义的注意力处理器,用于计算与存储attention,从而节约内存。如果不需要自定义处理器,调用set_default_attn_processor方法可恢复默认的attention实现。
+总的来说,PriorTransformer作为一个plug and play的模型,为CLIP这样强大的视觉-语言模型赋予了生成能力,使得我们可以用自然语言灵活地操控图像生成。同时其denoising的思路和灵活的架构,也为后续的相关研究提供了很好的基础。这项工作展现了将CLIP等强大预训练模型与生成式模型相结合的广阔前景。
+
+ControlNet
+总:
+上文主要介绍了ControlNet模型,这是一种通过添加空间条件控制来增强预训练的文本到图像扩散模型的神经网络架构。它可以利用边缘、深度、分割、人体姿势等多种条件输入,在生成图像的过程中对模型进行更精细的控制。
+分:
+1.ControlNet模型架构
+ControlNet采用了一种名为"零卷积"的技术,通过逐步从零开始增加参数来确保在微调过程中不会引入有害噪声。它可以接受单个或多个条件输入,支持带或不带文本提示,并且对数据集大小具有鲁棒性。
+2.加载ControlNet模型
+ControlNet模型通常使用from_pretrained()函数加载,但也支持从原始格式加载。可以使用ControlNetModel.from_single_file方法从单个文件加载完整的模型。
+3.ControlNetModel类
+ControlNetModel是ControlNet的核心类,它继承了UNet2DConditionModel。主要参数包括输入通道数、下采样块类型、输出通道数、注意力头维度等。forward方法定义了模型的前向传播过程。
+4.ControlNetOutput类
+ControlNetOutput表示ControlNetModel的输出,包括不同分辨率下的下采样激活,以及中间块(分辨率最低)的激活。这些输出可用于调节原始UNet的相应激活。
+5.FlaxControlNetModel类
+FlaxControlNetModel是ControlNet在Flax框架下的实现。它支持JAX的一些内在特性,如JIT编译、自动微分、矢量化和并行化等。FlaxControlNetOutput表示FlaxControlNetModel的输出。
+总:
+ControlNet通过在文本到图像扩散模型中引入空间条件控制,使得在图像生成过程中能够进行更精细的控制。它支持多种条件输入,采用渐进式训练方式,具有较好的鲁棒性。Diffusers库提供了方便的接口用于加载和使用ControlNet模型,并给出了相关的关键类的详细说明。ControlNet的引入,为文本到图像生成任务提供了更多的可能性和灵活性。
+
+
+
+Pipelines
+aMUSEd
+总：
+aMUSEd模型是一个功能强大、使用便捷的轻量级文本到图像生成模型。它基于MUSE架构，相比其他扩散模型，aMUSEd的参数量更少，推理过程需要的正向传递次数更少，特别适合需要快速生成大量图像的应用场景。
+分：
+1. aMUSEd模型特点：
+基于MUSE架构，是一个vqvae token的transformer模型
+参数量只有MUSE的10%左右，amused-256有6.03亿参数，amused-512有6.08亿参数
+使用更小的文本编码器CLIP-L/14，而非t5-xxl
+推理过程的正向传递次数更少，生成速度更快，尤其在大batch size情况下优势明显
+2.三种pipeline的使用方法：
+AmusedPipeline：基础的文本到图像生成管道
+AmusedImg2ImgPipeline：以输入图像为参考进行文本引导的图像生成/编辑
+AmusedInpaintPipeline：使用文本和输入的局部mask图进行图像修补
+每个pipeline的__call__方法都有详细的参数说明，通过调节prompt、image、mask_image、strength、guidance_scale等参数实现对生成过程的精细控制。
+3.使用示例：
+加载amused-512模型，完成文本提示下的图像生成
+使用图像和mask作为输入，借助文本提示实现图像编辑
+开启xformers的memory_efficient_attention，在推理阶段降低显存占用并一定程度提升速度
+总：
+总的来说，aMUSEd是一个优秀的轻量级文本到图像生成模型。它继承了MUSE架构的优点，同时进一步降低了参数量和推理开销。通过本教程提供的三种pipeline，用户可以方便地应用aMUSEd模型完成多种图像生成和编辑任务。借助xformers库还可进一步提升模型的推理性能。aMUSEd模型为轻量高效的文图生成开辟了新的可能，值得进一步探索应用。
+
+AnimateDiff
+总:
+AnimateDiff是一个用于文本生成视频的pipeline。它基于扩散模型,可以利用预训练的运动模块(Motion Adapter)来为现有的文本到图像模型(如Stable Diffusion)赋予生成视频的能力,而无需重新训练。使用AnimateDiff可以方便地制作高质量、个性化的视频。
+分:
+1.AnimateDiffPipeline类
+这个管道类用于文本引导的视频生成。它需要加载一个Motion Adapter检查点和基于Stable Diffusion的模型检查点。可以通过调整prompt、num_frames、num_inference_steps等参数来控制生成视频的内容、帧数和质量。生成结果以GIF动图的格式返回。
+2.AnimateDiffVideoToVideoPipeline类
+这个管道类可以基于输入的参考视频,生成风格/人物/背景等经过修改的新视频。与AnimateDiffPipeline类似,它也需要Motion Adapter和Stable Diffusion模型检查点。通过设置不同的文本提示,可以引导生成具有特定内容的视频。strength参数可以调节生成视频与原始视频的相似程度。
+3.加载和使用Motion LoRAs
+Motion LoRAs是一些需要与特定Motion Adapter检查点配合使用的轻量级适配器模型。它们可以为生成的视频添加特定类型的动作,如拉近、平移等。文章展示了如何加载单个或多个Motion LoRAs,并调整它们各自的权重,实现更加复杂和可控的视频生成效果。
+4.应用FreeInit改善视频质量
+FreeInit是一种无需额外训练,就能提高基于扩散模型生成视频的时间一致性和整体质量的方法。通过反复细化初始噪声的时空低频分量,它可以弥补训练和推理之间的差异。文章介绍了在AnimateDiff管道中启用FreeInit,并调节相关参数的方法。
+总:
+综上所述,本文全面介绍了如何使用Diffusers库提供的AnimateDiff相关工具,基于文本提示或参考视频生成丰富多样的动态视频内容。通过学习AnimateDiffPipeline、AnimateDiffVideoToVideoPipeline等管道类的用法,加载Motion LoRAs,以及应用FreeInit等高级技巧,读者可以探索出令人惊艳的视频生成效果。相信本文将帮助更多开发者和创作者利用AI技术,在视频内容创作领域实现更大的突破。
+
+Attend-and-Excite
+总:
+这篇文章介绍了一种名为Attend-and-Excite的技术,可以用于稳定扩散(Stable Diffusion)模型的文本到图像生成过程。该技术通过在推理过程中实时干预,引导模型细化交叉注意力单元以关注文本提示中的所有主题词,并增强它们的激活,从而鼓励模型生成与文本提示描述的所有主题相符的图像。
+
+分:
+1.Attend-and-Excite技术旨在解决当前最先进的扩散模型在生成完全传达给定文本提示语义的图像方面可能存在的缺陷,例如灾难性遗忘(模型无法生成提示中的一个或多个主题)以及无法正确绑定属性(如颜色)到相应的主题。
+2.Attend-and-Excite是一种基于注意力的生成语义护理(Generative Semantic Nursing, GSN)方法。它在推理时实时干预生成过程,以提高生成图像的忠实度。
+3.StableDiffusionAttendAndExcitePipeline类是使用Attend-and-Excite技术进行文本到图像生成的管道。它继承自DiffusionPipeline类,因此也继承了通用的方法,如加载、保存、在特定设备上运行等。
+4.StableDiffusionAttendAndExcitePipeline的__call__方法用于生成图像。它接受多个参数,如提示词、令牌索引(要使用Attend-and-Excite技术更改的令牌)、图像高度和宽度、推理步数、引导比例、负提示词等。
+5.可以使用get_indices函数找出要更改的令牌的索引。在生成过程中,这些索引对应的令牌将使用Attend-and-Excite技术进行改变。
+6.StableDiffusionPipelineOutput类是Stable Diffusion管道的输出类,包含生成的图像列表以及相应生成图像是否包含"不安全工作"(NSFW)内容的布尔值列表。
+总:
+Attend-and-Excite技术通过引导Stable Diffusion模型关注文本提示中的所有主题词并增强其激活,提高了文本到图像生成的忠实度。StableDiffusionAttendAndExcitePipeline类提供了一种方便的方法来使用该技术生成图像,同时还继承了DiffusionPipeline类的通用功能。使用该管道需要指定要更改的令牌索引,以及其他生成参数。生成的输出包含图像列表和NSFW内容检测结果。总的来说,Attend-and-Excite技术有望改善Stable Diffusion模型生成图像的质量和忠实度。
+
+AudioLDM
+总:
+AudioLDM是一种新颖的文本到音频的生成模型,它利用对比语言-音频预训练(CLAP)得到的潜在表征,构建了一个基于潜变量扩散模型(Latent Diffusion Model)的生成系统。AudioLDM可以根据文本提示生成相应的音频,包括音效、语音和音乐等,在文本条件音频生成和处理方面实现了多项突破。
+
+分:
+1.AudioLDM的核心是学习CLAP得到的音频连续潜在表征。通过在音频潜在空间上构建LDM,AudioLDM避免了直接对高维音频信号建模,在保证生成质量的同时显著提升了计算效率。
+2.AudioLDM由多个关键模块构成,包括VAE编码器、文本编码器、UNet条件模型、采样调度器和声码器等。它们协同工作,将文本提示映射为潜在表征条件,引导LDM生成与文本语义相符的音频潜码,并经过解码重建得到波形。
+3.使用AudioLDM进行文本到音频的生成时,描述性的提示文本通常效果最佳。可以使用形容词描述声音特征,提示内容要具体。此外,可以通过调节推理步数和音频长度等参数,控制音频预测的质量和时长。
+4.除了文本条件音频生成,AudioLDM还支持多种文本引导的音频处理功能,如音色转换等。这些功能可以在zero-shot条件下实现,无需针对特定任务进行微调。
+5.AudioLDMPipeline类实现了AudioLDM模型推理的pipeline,它将文本编码、潜码采样、音频解码等步骤整合在一起。用户可以方便地调用pipeline的__call__方法,一步实现文本到音频的生成。
+总:
+AudioLDM是一个强大的文本到音频生成系统,通过在音频潜在空间上构建LDM,实现了高质量、高效率的音频生成。它不仅支持文本条件音频生成,还具备多种音频处理功能。AudioLDMPipeline为用户提供了方便的模型调用接口,有望在语音合成、音乐生成等应用领域发挥重要作用,推动多模态生成技术的发展。
+
+AudioLDM 2
+总之,上述内容主要介绍了AudioLDM2这一文本到音频的生成模型。AudioLDM2使用了潜在扩散模型,能够生成高质量、多样化的音频,对文本输入具有很好的理解和匹配能力。
+分述如下:
+1.AudioLDM2模型架构:
+使用了CLAP和Flan-T5两个文本编码器,将输入的文本提示转换为隐空间表示。
+投影模型AudioLDM2ProjectionModel将文本编码后的隐空间表示投影到一个共享的隐空间。
+自回归语言模型GPT2根据投影后的隐空间表示生成新的隐空间表示序列。
+UNet模型以新生成的隐空间表示序列为条件,去噪隐空间中的音频表示,最终解码为波形。
+2.AudioLDM2的pipeline使用方法:
+提供AudioLDM2Pipeline类用于文本到音频的生成。
+通过设置不同的配置参数,如num_inference_steps、guidance_scale等,可以控制音频的生成质量和多样性。
+支持使用负面提示(negative prompt)引导模型避免生成不需要的音频。
+可以通过多次采样,自动为生成的多个音频按照与提示的相似度进行排序。
+3.AudioLDM2的训练数据和模型规模:
+提供了三个不同大小的预训练模型,适用于不同的任务,如通用文本到音频、音乐生成等。
+最大的模型audioldm2-large使用了1150k小时的音频数据进行训练,UNet有7.5亿参数,整体模型参数量达15亿。
+4.其他AudioLDM2的核心组件:
+AudioLDM2UNet2DConditionModel:基于UNet结构,使用了self-attention和cross-attention,以文本编码器的输出为条件去噪隐空间中的音频表示。
+AudioPipelineOutput:定义了pipeline的输出,包含了去噪后的音频采样数据。
+总的来说,AudioLDM2是一个功能强大的文本到音频生成模型。基于海量数据训练,AudioLDM2可以根据文本提示生成高质量、与文本高度匹配的音频。通过Diffusers库提供的pipeline,用户可以方便地使用AudioLDM2进行文本到音频的生成任务。同时,AudioLDM2的架构设计也为后续研究提供了很好的参考。
+
+AutoPipeline
+总:
+AutoPipeline是Diffusers库中的一个强大工具,旨在简化加载检查点和在工作流程中使用多个pipeline的过程。它能够根据任务自动检索相关的pipeline,无需了解具体的pipeline类,让用户能够无缝地切换任务和模型。
+分:
+1.AutoPipeline的主要功能
+简化加载检查点的过程:通过from_pretrained()方法,AutoPipeline可以根据任务自动检索相关的pipeline,而无需知道具体的pipeline类。
+在工作流程中使用多个pipeline:AutoPipeline支持在同一工作流程中使用多个pipeline,方便用户进行多任务处理。
+无缝切换任务和模型:通过from_pipe()方法,AutoPipeline可以在不重新分配额外内存的情况下,将组件从原始pipeline转移到新的pipeline,实现无缝切换。
+2.AutoPipeline支持的任务和模型
+AutoPipeline支持以下扩散模型的文本到图像、图像到图像和修复任务:
+Stable Diffusion
+ControlNet
+Stable Diffusion XL (SDXL)
+DeepFloyd IF
+Kandinsky 2.1
+Kandinsky 2.2
+3.AutoPipeline的三个主要类
+AutoPipelineForText2Image:用于实例化文本到图像的pipeline。
+AutoPipelineForImage2Image:用于实例化图像到图像的pipeline。
+AutoPipelineForInpainting:用于实例化图像修复的pipeline。
+这三个类都提供了from_pretrained()和from_pipe()方法,分别用于从预训练的权重实例化pipeline和从另一个已实例化的pipeline实例化pipeline。
+4.使用示例
+以下是使用AutoPipelineForText2Image的示例:
+from diffusers import AutoPipelineForText2Image
+pipeline = AutoPipelineForText2Image.from_pretrained("runwayml/stable-diffusion-v1-5")
+image = pipeline(prompt).images[0]
+以下是使用from_pipe()方法在文本到图像和图像到图像的pipeline之间切换的示例:
+from diffusers import AutoPipelineForText2Image, AutoPipelineForImage2Image
+pipe_t2i = AutoPipelineForText2Image.from_pretrained(
+    "runwayml/stable-diffusion-v1-5", requires_safety_checker=False
+)
+pipe_i2i = AutoPipelineForImage2Image.from_pipe(pipe_t2i)
+image = pipe_i2i(prompt, image).images[0]
+总:
+AutoPipeline是Diffusers库提供的一个强大而灵活的工具,它简化了加载检查点和在工作流程中使用多个pipeline的过程。通过自动检索相关的pipeline和无缝切换任务及模型,AutoPipeline让用户能够更加专注于创意工作本身,而无需过多关注底层的技术细节。AutoPipeline支持多种主流的扩散模型,涵盖了文本到图像、图像到图像和图像修复等常见任务,是一个值得掌握和使用的有力工具。
+
+BLIP-Diffusion
+总的来说,这篇教程主要介绍了如何使用Diffusers库提供的Blip Diffusion管道模型进行主体驱动的文本到图像生成。通过预训练的多模态编码器生成主体表征,再结合文本提示和扩散模型,可以高效灵活地生成和编辑各种主体的新图像。
+具体来说,教程分为两部分介绍Blip Diffusion的两种管道模型:
+1.BlipDiffusionPipeline
+这是基础的Blip Diffusion零样本主体驱动生成管道。主要步骤包括:
+	使用预训练的CLIP对文本提示进行编码
+	使用预训练的QFormer模型提取参考图像的多模态嵌入
+	将文本嵌入、图像嵌入和随机噪声输入给条件UNet和VAE decoder生成新图像
+	可通过调节guidance_scale、num_inference_steps等参数控制生成效果
+示例代码展示了如何使用该管道,以"狗"为主体,在参考照片的基础上根据"在水下游泳"的提示生成新图像。
+2.BlipDiffusionControlNetPipeline
+这是加入ControlNet的Blip Diffusion管道,可以使用附加的控制条件如Canny边缘图来进一步引导生成。除了基础管道的组件外,还加入了:
+	ControlNet模型,用于提取控制条件图像如边缘图的嵌入表征
+	将ControlNet的输出与其他条件一起输入UNet来引导生成过程
+示例代码展示了如何以"茶壶"为目标主体,在"花"参考图的风格和茶壶轮廓图的引导下,生成"大理石桌上的茶壶"图像。
+总的来说,Blip Diffusion提供了一种灵活、高效的方式进行主体驱动的文图生成和编辑。基础管道已经能生成高质量、符合提示的新颖图像,而ControlNet等进一步赋予了更精细的控制能力。这些管道的推出将让更多用户受益于SOTA的扩散模型能力。
+
+Consistency Models
+总:
+本文主要介绍了Consistency Models(一致性模型)这一新型生成式模型。一致性模型能够通过直接将噪声映射到数据来生成高质量的样本,支持快速的一步生成,同时也允许多步采样以权衡计算量和样本质量。此外,一致性模型还支持无需显式训练即可进行图像修复、着色和超分辨率等零样本数据编辑任务。一致性模型可以通过蒸馏预训练的扩散模型或作为独立的生成模型进行训练,在各种基准测试中取得了优异的性能。
+分:
+1.一致性模型的提出背景
+扩散模型在图像、音频和视频生成领域取得了显著进展,但它们依赖于迭代采样过程,导致生成速度较慢。为了克服这一限制,作者提出了一致性模型。
+2.一致性模型的特点
+通过直接将噪声映射到数据来生成高质量样本
+设计上支持快速一步生成,同时允许多步采样权衡计算量和样本质量
+无需显式训练即可支持图像修复、着色和超分辨率等零样本数据编辑任务
+可以通过蒸馏预训练的扩散模型或作为独立生成模型进行训练
+3.实验结果
+通过广泛的实验,作者证明一致性模型在一步和少步采样方面优于现有的扩散模型蒸馏技术,在CIFAR-10一步生成中实现了3.55的最新FID,在ImageNet 64x64 一步生成中实现了6.20的FID。当独立训练时,一致性模型成为一种新的生成模型家族,可以在CIFAR-10、ImageNet 64x64和LSUN 256x256等标准基准测试中超越现有的一步非对抗生成模型。
+4.代码实现
+原始代码库可以在openai/consistency_models中找到,更多检查点可在openai获得。
+5.使用技巧
+为了进一步加速,可以使用torch.compile在<1秒内生成多个图像。此外,文中还给出了使用ConsistencyModelPipeline进行一步采样和多步采样的代码示例。
+总:
+总的来说,一致性模型是一种有前景的新型生成式模型,它能够在保证生成速度的同时生成高质量的样本,并支持多种数据编辑任务。通过在各种基准测试中的优异表现,一致性模型展现出了其作为扩散模型替代方案的潜力。Diffusers库提供了方便的接口,使得研究者和从业者能够轻松地使用和探索一致性模型。相信随着进一步的研究和优化,一致性模型有望在更多领域得到应用。
+
+ControlNet
+
+
+ControlNet with Stable Diffusion XL
+
+
+Dance Diffusion
+总：
+本文介绍了由Harmonai发布的Dance Diffusion，它是一款为音乐制作人和音乐家设计的生成式音频工具。文章主要介绍了如何使用Diffusers库中的DanceDiffusionPipeline类和相关函数来生成音频样本。
+分：
+1.DanceDiffusionPipeline类
+该类继承自DiffusionPipeline，可以使用父类中实现的通用方法，如下载、保存、在特定设备上运行等。
+构造函数接受两个参数：UNet1DModel（用于去噪编码音频）和SchedulerMixin（与UNet一起使用，去噪编码音频潜变量）。
+2.__call__方法
+DanceDiffusionPipeline的核心方法，用于生成音频。
+接受多个参数，如batch_size（生成音频样本的数量）、num_inference_steps（去噪步数，步数越多，音频质量越高，但推理速度越慢）等。
+返回AudioPipelineOutput对象或元组，包含生成的音频。
+3.使用示例
+从harmonai/maestro-150k预训练模型初始化DiffusionPipeline。
+将管道移动到CUDA设备上。
+调用管道生成指定长度的音频。
+可以将生成的音频保存到本地或在Google Colab中显示。
+4.AudioPipelineOutput类
+音频管道的输出类。
+构造函数接受一个参数audios，它是一个NumPy数组，形状为(batch_size, num_channels, sample_rate)，表示去噪后的音频样本列表。
+总：
+通过使用Diffusers库提供的DanceDiffusionPipeline类及相关函数，用户可以轻松地生成高质量的音频样本。文章详细介绍了如何初始化管道、调用生成方法以及处理生成的音频输出。Dance Diffusion作为一款强大的生成式音频工具，将为音乐制作人和音乐家提供更多创作可能性。
+
+DDIM
+总：
+本文主要介绍了Denoising Diffusion Implicit Models (DDIM)及其在Diffusers库中的应用。DDIM是一种高效的生成式模型，可以在更短的时间内生成高质量的图像。文章详细介绍了DDIMPipeline的使用方法和参数设置，并提供了示例代码。
+分：
+1.DDIM简介
+DDIM是一种隐式概率模型，与Denoising Diffusion Probabilistic Models (DDPMs)有相同的训练过程，但采用了非马尔可夫扩散过程，可以更快地生成样本。
+与DDPMs相比，DDIM可以在保证样本质量的同时，将生成速度提高10到50倍。
+DDIM允许在计算时间和样本质量之间进行权衡，并可以直接在潜在空间中进行语义上有意义的图像插值。
+2.DDIMPipeline
+DDIMPipeline是Diffusers库中用于图像生成的管道。
+它继承自DiffusionPipeline，具有通用的方法，如下载、保存和在特定设备上运行等。
+DDIMPipeline的构造函数需要两个参数：unet (UNet2DModel)和scheduler (SchedulerMixin)。
+3.__call__方法
+__call__是DDIMPipeline的主要生成方法，用于生成图像。
+它有多个可选参数，如batch_size、generator、eta、num_inference_steps等，可以根据需要进行调整。
+方法返回ImagePipelineOutput对象或元组，其中包含生成的图像。
+4.示例代码
+文章提供了使用DDIMPipeline生成图像的示例代码。
+首先加载预训练的模型和调度器，然后运行管道进行推理，对随机噪声进行去噪。
+生成的图像可以转换为PIL格式并保存。
+5.ImagePipelineOutput
+ImagePipelineOutput是图像管道的输出类。
+它包含一个参数images，可以是PIL图像列表或NumPy数组。
+总：
+DDIM是一种高效的生成式模型，可以在更短的时间内生成高质量的图像。Diffusers库提供了DDIMPipeline，使得在Python中使用DDIM变得简单易行。通过调整各种参数，如eta和num_inference_steps，用户可以在计算时间和样本质量之间进行权衡。文章提供的示例代码演示了如何使用DDIMPipeline生成图像，为读者提供了一个很好的起点。
+
+DDPM
+总:
+本文是Hugging Face的Diffusers库中关于DDPM(Denoising Diffusion Probabilistic Models)的教程文档。DDPM是一种基于扩散模型的生成式模型,可以生成高质量的图像。本教程主要介绍了DDPM的原理、实现和使用方法。
+分:
+1.DDPM原理:
+DDPM是一类受非平衡热力学启发的隐变量模型。
+通过在去噪得分匹配和Langevin动力学之间建立新颖的联系,设计了一个加权变分边界进行训练,从而获得了最佳结果。
+模型自然地采用了一种渐进式有损解压缩方案,可以解释为自回归解码的推广。
+在CIFAR10数据集上,取得了9.46的Inception分数和3.17的最先进FID分数。在256x256 LSUN上,获得了与ProgressiveGAN相似的样本质量。
+2.DDPM实现:
+Diffusers库中,DDPM由DDPMPipeline类实现。
+DDPMPipeline主要由两部分组成:UNet2DModel用于对编码的图像潜变量进行去噪;SchedulerMixin用于与UNet2DModel结合以去噪编码图像,可以是DDPMScheduler或DDIMScheduler。
+DDPMPipeline继承自DiffusionPipeline,通用的方法如下载、保存、在特定设备上运行等都在父类中实现。
+3.DDPM使用:
+通过调用DDPMPipeline的from_pretrained方法,可以加载预训练好的模型和scheduler。
+通过调用DDPMPipeline实例的__call__方法,可以运行pipeline进行推理,生成图像。可配置的参数包括batch_size、generator、num_inference_steps、output_type和return_dict。
+推理结果为ImagePipelineOutput对象,包含了一个batch_size长度的PIL图像列表,或形状为(batch_size, height, width, num_channels)的NumPy数组。
+最后可以将生成的图像保存到本地。
+总:
+DDPM是一种强大的扩散概率模型,Diffusers库提供了简洁的接口用于加载预训练模型、运行推理生成图像。本教程详细介绍了DDPM的原理和实现,并通过示例代码演示了如何使用DDPMPipeline生成图像,为入门DDPM提供了很好的指导。
+
+DeepFloyd IF
+
+
+DiffEdit
+总体来说,这篇教程介绍了Hugging Face的Diffusers库中DiffEdit模型的原理和使用方法。DiffEdit是一种基于扩散模型的图像语义编辑方法,可以根据文本提示对图像进行定向编辑。
+分点讲解如下:
+1.DiffEdit模型概述
+DiffEdit利用文本条件扩散模型在图像语义编辑任务上取得了很好的效果。
+它在生成图像的同时,要求编辑后的图像要尽可能与原始输入图像相似。
+DiffEdit的主要贡献是可以自动生成一个掩码,高亮需要编辑的图像区域,无需人工提供编辑掩码。
+此外,它利用潜在推理来保持感兴趣区域的内容,并与基于掩码的扩散方法产生很好的协同作用。
+2.StableDiffusionDiffEditPipeline的使用
+DiffEdit在Diffusers库中以StableDiffusionDiffEditPipeline类的形式提供。
+首先通过from_pretrained方法加载预训练的DiffEdit模型。
+generate_mask方法根据源提示词和目标提示词生成编辑掩码,控制最终图像中语义编辑的位置。
+invert方法根据提示和原始图像生成部分反演的潜码,引导编辑过程。
+最后调用pipeline的__call__方法,传入提示词、编辑掩码和反演潜码,即可得到编辑后的图像。
+pipeline还提供了一些实用的方法,如启用/禁用VAE切片和平铺,对提示进行编码等。
+3.DiffEdit的一些使用技巧
+要改变编辑方向,如把"猫-狗"反过来改成"狗-猫",需要调换generate_mask的源提示词和目标提示词,改变invert的输入提示,以及调换最终pipeline调用时的提示词和反向提示词。
+源提示词和目标提示词可以手动指定,也可以自动生成其对应的文本嵌入向量。
+在调用invert时,为prompt参数分配一个描述整体图像的标题或文本嵌入,可以帮助引导反演潜码的采样过程。
+总的来说,DiffEdit是一种非常强大的图像语义编辑方法。通过Diffusers库提供的StableDiffusionDiffEditPipeline,用户可以方便地利用文本提示对图像进行定向编辑。这个教程详细介绍了DiffEdit的原理和使用方法,并给出了一些有用的使用技巧,对于入门DiffEdit非常有帮助。
+
+DiT
+总之，这篇文章主要介绍了DiT(Diffusion Transformers)，一种基于transformer架构的全新扩散模型。DiT通过用transformer替换常用的U-Net作为图像潜在表示去噪的主干网络，在图像生成任务上取得了优异的性能。
+DiT的几个关键点包括:
+1.DiT使用transformer而非U-Net作为去噪的主干网络。Transformer可以更好地捕捉图像的全局信息和长距离依赖关系。
+2.作者通过前向传播计算量(GFlops)分析了DiT的可扩展性。结果表明，具有更高GFlops的DiT模型(通过增加transformer深度/宽度或输入token数量)始终能取得更低的FID，生成质量更高。
+3.最大规模的DiT-XL/2模型在ImageNet 256x256和512x512的class-conditional图像生成任务上超越了之前所有的扩散模型，在256x256分辨率下取得了2.27的SOTA FID。
+4.文中还提供了DiT的pipeline实现，包括DiTPipeline类和ImagePipelineOutput类。通过这些类和方法，用户可以方便地利用DiT来进行图像生成。
+5.作者还提醒读者参考Schedulers指南来平衡inference速度和生成质量，以及使用reuse components功能在不同pipeline间高效加载相同组件。
+总的来说，DiT是一个全新的高性能扩散模型，通过引入transformer架构，DiT在图像生成任务上实现了新的SOTA，并展现了良好的可扩展性。DiT有望成为图像生成领域的一个重要进展和备受关注的研究方向。同时，配套的pipeline实现也让DiT变得易用，更多研究者和从业者能从中受益。
+
+I2VGen-XL
+总:
+本文主要介绍了Diffusers库中的I2VGenXL管道(pipeline),它是一个基于cascaded扩散模型的高质量图像到视频合成方法。该方法通过解耦语义精度和视频质量这两个因素,利用静态图像作为关键引导,从而提高了模型性能。
+分:
+1.I2VGenXL由两个阶段组成:
+基础阶段:通过使用两个分层编码器,保证连贯的语义并保留输入图像的内容。
+细化阶段:通过合并额外的简短文本,提高视频的细节,并将分辨率提高到1280×720。
+2.为了优化模型,收集了约3500万个单镜头文本-视频对和60亿个文本-图像对。这样,I2VGenXL可以同时增强生成视频的语义准确性、细节连续性和清晰度。
+3.I2VGenXLPipeline类是在Diffusers库中实现的I2VGenXL模型的管道。它继承自DiffusionPipeline类,包含了VAE、CLIP文本编码器、CLIP图像编码器、I2VGenXLUNet和scheduler等组件。
+4.__call__方法是管道的主要调用方法,可以根据输入的prompt、image等参数生成相应的视频帧。可设置的参数包括视频的高度、宽度、帧率、步数、guidance_scale等。
+5.管道还提供了其他辅助方法,如enable_freeu用于启用FreeU机制加强去噪性能,enable_vae_slicing和enable_vae_tiling用于启用切片和平铺的VAE解码以节省内存等。
+总:
+总的来说,I2VGenXL是一个强大的图像到视频合成管道,可以生成高质量、语义准确、时空连续的视频。通过集成到Diffusers库中,用户可以方便地使用该模型进行各种视频生成任务。文章详细介绍了I2VGenXL的原理、组成结构以及在Diffusers库中的实现方式,对于理解和应用该模型提供了很好的指导。
+
+InstructPix2Pix
+总之,这篇文章主要介绍了两个基于Stable Diffusion的pipelines用于图像编辑:StableDiffusionInstructPix2PixPipeline和StableDiffusionXLInstructPix2PixPipeline。下面我将分别对它们进行详细讲解。
+1.StableDiffusionInstructPix2PixPipeline是一个pixel-level的图像编辑pipeline,它继承自DiffusionPipeline,除了基本的方法外还支持加载textual inversion embeddings、LoRA weights等。主要组件包括:
+VAE:用于将图像编码解码为latent表示
+CLIP text encoder:用于将文本编码为隐空间
+Tokenizer:用于将文本token化
+UNet:用于去噪latent表示
+Scheduler:用于UNet去噪过程
+Safety checker:用于检查生成图像的安全性
+2.该pipeline的__call__方法接受prompt、image等参数,通过UNet去噪latent表示,并用VAE解码得到最终的编辑后图像。另外它还引入了FreeU机制来加速采样。
+StableDiffusionXLInstructPix2PixPipeline是基于Stable Diffusion XL的图像编辑pipeline,除了上述StableDiffusionInstructPix2PixPipeline的组件外,它还使用了:
+	第二个CLIP text encoder:使用了更大的CLIP模型
+	第二个Tokenizer
+该pipeline针对更高分辨率(如768x768)的图像编辑进行了优化,并引入了slicing、tiling等VAE解码加速机制。同时它还支持一些SDXL独有的micro-conditioning功能。
+总的来说,这两个pipelines为Diffusers库提供了功能强大的pixel-level图像编辑能力。通过加载预训练权重,并使用一些加速采样的机制,用户可以方便地使用文本prompt来对目标图像进行编辑,生成高质量的编辑后图像。
+
+Kandinsky 2.1
+
+
+Kandinsky 2.2
+
+
+Kandinsky 3
+总:
+本文主要介绍了Diffusers库中的Kandinsky 3模型,它是一个强大的文本生成图像和图像到图像转换的扩散模型。通过对模型架构和pipeline使用方法的详细讲解,帮助读者快速上手使用Kandinsky 3模型进行AI绘画创作。
+分:
+1.Kandinsky 3模型架构
+Kandinsky 3模型主要由三部分组成:
+FLAN-UL2编码器-解码器:基于T5架构,用于文本理解
+新的U-Net架构:使用BigGAN-deep blocks,在保持参数量不变的情况下加倍了深度,提高了视觉质量
+Sber-MoVQVAE解码器:在图像恢复任务中表现优异
+2.Kandinsky3Pipeline的使用
+通过Kandinsky3Pipeline,可以方便地调用训练好的Kandinsky 3模型进行文生图。主要参数包括:
+prompt:指导图像生成的文本提示
+num_inference_steps:去噪步数,步数越多生成图像质量越高,但推理时间也越长
+guidance_scale:分类无关引导尺度,大于1时会使生成图像更符合文本提示,但可能降低图像质量
+negative_prompt:反向文本提示,避免生成某些元素
+num_images_per_prompt:每个提示生成的图像数量
+output_type:输出图像格式,支持PIL图片对象或numpy数组
+3.Kandinsky3Img2ImgPipeline的使用
+利用Kandinsky3Img2ImgPipeline,可以在给定初始图像的基础上,结合文本提示对图像进行编辑。除了上述通用参数外,主要参数还包括:
+image:初始图像,可以是PyTorch张量、PIL图片对象或numpy数组
+strength:初始图像与噪声的混合强度,取值在0到1之间,决定了对原图改动的大小
+总:
+Kandinsky 3是一个功能强大、效果出色的扩散模型,既可以根据文本提示从零生成图像,也可以在现有图像的基础上进行编辑。通过对模型架构的优化,在高分辨率大尺寸图像的生成上取得了突破。Diffusers库提供的pipeline接口大大简化了模型的使用,希望本文可以帮助读者快速掌握Kandinsky 3,把自己的创意想象力发挥出来。
+
+Latent Consistency Models
+总:
+本文介绍了一种名为Latent Consistency Models(LCM)的潜在空间一致性模型,它能够在保证生成图像质量的同时,大幅加快基于latent diffusion models的图像生成速度。同时文章还提供了LCM的PyTorch实现diffusers库,使得开发者可以方便地使用和扩展LCM。
+分:
+1.LCM的提出背景
+Latent Diffusion Models(LDM)在高分辨率图像生成方面取得了瞩目成果,但是其迭代的采样过程计算量巨大,导致生成速度较慢。受Consistency Models的启发,研究者提出了Latent Consistency Models(LCM),可以在保持LDM生成质量的同时,显著加快推理采样速度。
+2.LCM的原理
+LCM将引导的逆向扩散过程看作求解一个增广概率流ODE(PF-ODE)。LCM被设计用于直接预测该ODE在潜在空间中的解,从而避免了需要进行大量迭代,实现高保真、快速的采样。通过高效蒸馏预训练的classifier-free引导扩散模型,一个高质量的768x768分辨率、2-4步的LCM 只需要32个A100 GPU小时进行训练。
+3.LCM的训练方法
+除了标准的LCM训练,文章还介绍了一种称为Latent Consistency Fine-tuning(LCF)的新方法,它专门用于在定制图像数据集上微调LCM。在LAION-5B-Aesthetics数据集上的评估表明,LCM在少步推理情况下实现了当前最优的文本-图像生成性能。
+4.Diffusers库对LCM的实现
+文章提供了名为Diffusers的PyTorch库,其中实现了LCM相关的pipeline、模型和scheduler,主要包括:
+LatentConsistencyModelPipeline:用于文本到图像生成的LCM pipeline
+LatentConsistencyModelImg2ImgPipeline:用于图像到图像转换的LCM pipeline
+enable_freeu:启用FreeU机制以改善LCM去噪效果
+enable/disable_vae_slicing:启用/禁用VAE切片解码以节省显存
+enable/disable_vae_tiling: 启用/禁用VAE分块解码以节省大量显存
+开发者可以基于Diffusers库,方便地使用、训练和扩展LCM模型。文章还给出了详细的代码示例。
+总:
+LCM是一种创新的潜在扩散模型,它通过直接预测概率流ODE的解来实现高保真、快速的图像采样。Diffusers库提供了LCM的开箱即用实现,使研究者和开发者可以基于LCM轻松构建高效的图像生成应用。LCM有望在要求高质量、低延迟的大规模图像生成场景发挥重要作用。
+
+Latent Diffusion
+总体来说,这篇文章介绍了Diffusers库中的Latent Diffusion模型及其相关的管道(pipeline)。Latent Diffusion是一种用于高分辨率图像合成的强大模型,通过在预训练自编码器的潜在空间中应用扩散模型,实现了高质量、灵活可控的图像生成。
+具体内容可分为以下几点:
+1.Latent Diffusion模型概述
+由Robin Rombach等人在论文《High-Resolution Image Synthesis with Latent Diffusion Models》中提出
+将图像形成过程分解为去噪自编码器的序列应用,在图像数据等领域取得了最先进的合成结果
+允许在无需重新训练的情况下控制图像生成过程
+通过在强大的预训练自编码器的潜在空间中应用扩散模型,在复杂性降低和细节保持之间达到最佳平衡,大大提高了视觉保真度
+2.LDMTextToImagePipeline
+基于潜在扩散的文本到图像生成管道
+由vqvae、bert、tokenizer、unet和scheduler组件构成
+可通过调整prompt、height、width、num_inference_steps、guidance_scale等参数来控制生成过程
+3.LDMSuperResolutionPipeline
+基于潜在扩散的图像超分辨率管道
+由vqvae、unet和scheduler组件构成
+可将低分辨率图像作为起点,生成高分辨率图像
+4.ImagePipelineOutput
+图像管道的输出类
+包含batch_size个PIL图像或形状为(batch_size, height, width, num_channels)的NumPy数组
+总的来说,Latent Diffusion及其管道为高质量、可控的图像生成提供了强大的工具。通过在潜在空间中应用扩散模型,LDM在计算要求显著降低的同时,在图像修复、无条件图像生成、语义场景合成、超分辨率等多项任务上实现了新的最先进水平。Diffusers库让开发人员可以方便地使用和定制这些先进模型。
+
+MultiDiffusion
+总:
+本文是Diffusers库中StableDiffusionPanoramaPipeline类的使用教程。该类用于生成高质量、多样化且符合用户控制的全景图像,而无需进一步训练或微调预训练的文本到图像扩散模型。这种方法的核心是一种新的生成过程,它将多个扩散生成过程与一组共享参数或约束条件结合在一起。
+分:
+1.StableDiffusionPanoramaPipeline类的参数:
+vae:用于将图像编码和解码为潜在表示的变分自动编码器(VAE)模型。
+text_encoder:冻结的文本编码器(clip-vit-large-patch14)。
+tokenizer:用于标记文本的CLIPTokenizer。
+unet:用于去噪编码图像潜像的UNet2DConditionModel。
+scheduler:与unet结合使用以去噪编码图像潜像的调度程序,可以是DDIMScheduler、LMSDiscreteScheduler或PNDMScheduler之一。
+safety_checker:评估生成图像是否可能被视为冒犯或有害的分类模块。
+feature_extractor:从生成的图像中提取特征的CLIPImageProcessor,用作safety_checker的输入。
+2.StableDiffusionPanoramaPipeline类的__call__方法参数:
+prompt:指导图像生成的提示或提示列表。
+height:生成图像的像素高度。
+width:生成图像的像素宽度。宽度保持较高,因为管道应生成类似全景的图像。
+num_inference_steps:去噪步骤的数量。更多去噪步骤通常以较慢的推理为代价,从而获得更高质量的图像。
+guidance_scale:较高的指导规模值鼓励模型生成与文本提示紧密相关的图像,但以较低的图像质量为代价。当guidance_scale > 1时启用指导缩放。
+view_batch_size: 用于对拆分视图进行去噪的批量大小。对于某些性能高的GPU,更高的视图批量大小可以加快生成速度并增加VRAM使用量。
+negative_prompt:指导图像生成中不包含哪些内容的提示或提示列表。
+num_images_per_prompt:每个提示生成的图像数量。
+circular_padding:如果设置为True,则应用循环填充以确保没有拼接伪影。循环填充允许模型无缝地生成从图像最右侧到最左侧的过渡,在360度范围内保持一致性。
+3.StableDiffusionPanoramaPipeline的一些使用技巧:
+可以将view_batch_size参数指定为大于1,对于某些高性能GPU,这可以加速生成过程并增加VRAM使用量。
+确保传递相应的width参数以生成全景图像。建议使用默认值2048的宽度值。
+当使用全景图时,应用循环填充以确保最右侧和最左侧之间的无缝过渡,从而避免拼接伪影。通过启用循环填充(circular_padding=True),该操作在图像最右点之后应用额外的裁剪,使模型能够"看到"从最右侧到最左侧的过渡。
+总:
+综上所述,StableDiffusionPanoramaPipeline提供了一种灵活且可控的方式,使用预训练的文本到图像扩散模型生成高质量、多样化的全景图像,而无需进一步的训练或微调。通过调整各种参数,如提示、高度、宽度、推理步骤数、指导尺度等,用户可以根据自己的需求定制生成过程。此外,一些技巧如增加视图批量大小和应用循环填充,可以进一步优化生成性能和输出质量。
+
+MusicLDM
+总:
+本文介绍了一种名为MusicLDM的文本到音乐的生成模型。该模型基于扩散模型(Diffusion Model)实现,可以根据输入的文本提示生成相应的音乐片段。文中详细介绍了MusicLDM的模型结构、训练数据和生成过程,并提供了相应的代码示例。
+分:
+1.MusicLDM模型结构
+MusicLDM模型的灵感来自于Stable Diffusion和AudioLDM模型。它采用了文本到音频的潜在扩散模型(Latent Diffusion Model, LDM)结构,通过CLAP(Contrastive Language-Audio Pretraining)模型学习音频的连续表示。模型主要由以下几个部分组成:
+VAE(Variational Auto-Encoder):用于将音频编码为潜在表示,并从潜在表示解码为音频。
+文本编码器(Text Encoder):使用预训练的CLAP文本编码器将输入的文本提示编码为文本嵌入向量。
+UNet:一个条件UNet模型,用于去噪编码后的音频潜在表示。
+调度器(Scheduler):与UNet一起使用,控制去噪过程。可选择DDIM、LMS Discrete或PNDM调度器。
+Vocoder:使用SpeechT5HifiGAN作为Vocoder,将去噪后的潜在表示转换为音频波形。
+2.训练数据和数据增强
+MusicLDM在466小时的音乐数据上进行训练。为了解决音乐数据有限和版权问题,文中提出了两种基于节拍同步的数据增强策略:
+节拍同步音频混合(Beat-synchronous audio mixup):直接在时域上对音频进行混合。
+节拍同步潜在表示混合(Beat-synchronous latent mixup):在潜在表示空间中对音频进行混合。
+这些数据增强策略鼓励模型在训练样本之间进行插值,生成更加多样化但仍然忠实于相应风格的音乐。
+3.生成过程和评估指标
+在生成音乐时,可以通过设置推理步数(num_inference_steps)、制导比例(guidance_scale)和音频长度(audio_length_in_s)等参数来控制生成音频的质量和长度。此外,还可以使用负提示(negative prompt)来指定不需要生成的音乐元素。
+文章还提出了几个基于CLAP分数的评估指标,用于评估生成音乐的质量、新颖性以及与输入文本的相关性。实验结果表明,MusicLDM和节拍同步的混合策略能够提高生成音乐的质量和多样性。
+总:
+MusicLDM是一个基于扩散模型的文本到音乐生成系统。它通过训练一个条件去噪UNet来建模音频潜在表示,并使用CLAP模型将文本提示映射到音频领域。为了解决训练数据有限和版权问题,文中提出了节拍同步的音频混合和潜在表示混合策略进行数据增强。实验结果表明,MusicLDM能够根据文本提示生成高质量、多样化且与提示相关的音乐片段。这项工作为文本到音乐的生成任务提供了新的思路和方法。
+
+Paint by Example
+总:本文介绍了Diffusers库中PaintByExamplePipeline管道用于实现基于示例图像的指导图像编辑。
+分:
+1.PaintByExamplePipeline接收输入的待编辑图像、遮罩图像和示例图像,通过自监督学习将源图像和示例图像解耦和重组,实现基于示例的可控图像编辑。
+2.为避免直接复制粘贴示例图像引入的伪影,引入了信息瓶颈和强数据增强。同时为保证编辑的可控性,设计了任意形状的示例图像遮罩,并利用classifier-free guidance增加编辑结果与示例图像的相似度。
+3.整个框架只需扩散模型的一次前向传播,无需任何迭代优化。实验表明该方法在高保真度下实现了令人印象深刻的性能,可对野外图像进行可控编辑。
+4.提供了PaintByExamplePipeline类的详细参数说明,以及使用示例代码展示如何加载模型、准备输入图像并执行推理得到编辑后的图像。
+5.StableDiffusionPipelineOutput类定义了管道的输出,包含了去噪后的PIL图像列表以及每张图是否包含不安全内容的检测结果。
+总:PaintByExamplePipeline提供了一种新颖的基于示例指导的图像编辑方法,通过自监督解耦和masked示例图像实现对目标区域的可控编辑,并采用了一系列技术避免伪影,提高编辑质量。用户可以方便地使用Diffusers库来加载该管道模型,准备输入图像,并一步得到编辑后的高质量图像结果。
+
+Personalized Image Animator (PIA)
+总:
+PIA管道利用即插即用的时间对齐模块,可以将各种个性化T2I模型无缝转换为图像动画模型,生成具有独特风格、高保真细节和可控动作的视频。使用PIA只需很少的代码,不需要针对不同模型进行调优。
+分:
+1.PIA的核心是在基础T2I模型的基础上添加经过良好训练的时间对齐层,从而实现图像到视频的转换。其中的关键是引入条件模块,利用条件帧和帧间亲和度作为输入,在潜空间中引导单帧合成,传递外观信息。
+2.使用PIA需要Motion Adapter检查点和Stable Diffusion 1.5模型。Motion Adapter负责在图像帧之间添加连贯的运动,应用在SD的UNet模型的Resnet和Attention块之后。此外还需将UNet的输入卷积层替换为9通道的版本。
+3.FreeInit是一种在推理阶段迭代优化潜在初始噪声,提高视频时间一致性和整体质量的方法,可以无缝用于PIA等多种视频生成模型。在PIA管道中可通过enable_free_init()方法启用。
+4.FreeU通过在UNet的两个阶段分别缩放skip特征和backbone特征的贡献,可减轻"过度平滑"效应,提升图像质量。在PIA管道中可通过enable_freeu()方法启用。
+5.PIAPipeline类封装了PIA的前向推理逻辑,可以根据输入的图像、文本提示等参数,通过可配置的扩散过程生成对应的视频输出。
+总:
+综上所述,PIA管道为个性化图像到视频的生成提供了一种简洁有效的解决方案。通过引入时间对齐模块并支持FreeInit、FreeU等优化策略,PIA可以基于各种T2I模型生成高质量、可控的动画视频,为内容创作开辟了新的可能性。Diffusers库中封装的PIAPipeline接口使得开发者可以方便地使用和扩展PIA模型。
+
+PixArt-α
+总:
+本文是Hugging Face的Diffusers库的教程文档之一,主要介绍了PixArt-α模型及其相应的Diffusion Pipeline。PixArt-α是一个基于Transformer的文本到图像扩散模型,能够以较低的训练成本生成高分辨率、高质量、符合文本描述的图像。
+分:
+1.PixArt-α模型介绍
+PixArt-α是扩散模型中的SOTA,其生成图像质量可以与Imagen、Stable Diffusion XL等大模型媲美,同时训练成本却大大降低。
+为实现高质量低成本,PixArt-α采用了3个关键设计:训练策略分解、高效的T2I Transformer结构、高信息量的数据集。
+与Stable Diffusion v1.5相比,PixArt-α的训练速度提高了10倍,训练成本只有SD的10%左右。
+2.PixArtAlphaPipeline的使用
+加载pipeline:可以直接从PixArt-α的checkpoint加载pipeline,指定精度为float16以减小显存占用。
+低显存推理:通过仅使用8 bit精度加载text encoder、分阶段删除不需要的模型组件等方法,可以在8GB显存下运行1024分辨率的PixArt XL。
+关键参数:num_inference_steps影响采样步数,guidance_scale控制classifier free guidance强度,提示词长度和复杂度也影响生成效果。
+输入输出:可以输入prompt文本、embeddings、latents等,返回PIL图片对象或NumPy数组。
+3.PixArtAlphaPipeline技术细节
+主要组件:Transformer作为主干网络,T5作为text encoder,Variational AutoEncoder(VAE)编码/解码图像,DPMSolverMultistepScheduler控制去噪 过程。
+分辨率处理:将输入的高宽对应到内置的bins上,生成latents后再resize回原分辨率。
+提示词处理:可以指定正向提示词prompt和反向negative_prompt,也可以直接输入embedding。提示词越长生成时间越长,显存占用也越高。
+总:
+PixArt-α是一个强大的text-to-image扩散模型,在保证生成图像质量的同时大幅降低了训练成本。Diffusers库提供了PixArtAlphaPipeline,让用户可以方便地使用该模型进行推理,并提供了多种参数和接口满足不同需求。但PixArt-α对显存要求较高,在实际使用时需要根据设备性能和需求权衡参数设置。总的来说,PixArt-α代表了扩散模型领域的重要进展,有望进一步推动文本到图像生成技术的发展。
+
+Self-Attention Guidance
+总:
+本文主要介绍了Diffusers库中的StableDiffusionSAGPipeline管道和相关的使用方法。StableDiffusionSAGPipeline是一种用于文本到图像生成的管道,它采用了Self-Attention Guidance(SAG)技术来提高生成图像的质量和稳定性。通过合理设置参数并调用管道的__call__方法,用户可以根据输入的文本提示生成高质量的图像。
+分:
+1.StableDiffusionSAGPipeline的初始化参数:
+vae:用于将图像编码为潜在表示并解码的变分自编码器(VAE)模型
+text_encoder:冻结的文本编码器(clip-vit-large-patch14)
+tokenizer:将文本转换为token的CLIPTokenizer
+unet:用于去噪潜在图像表示的UNet2DConditionModel
+scheduler:与unet结合使用以去噪潜在图像表示的调度器,可以是DDIMScheduler、LMSDiscreteScheduler或PNDMScheduler
+safety_checker(可选):用于估计生成图像是否包含攻击性或有害内容的安全检查器
+feature_extractor:从生成的图像中提取特征作为safety_checker的输入的CLIPImageProcessor
+2.StableDiffusionSAGPipeline的__call__方法参数:
+prompt:指导图像生成的文本提示
+height和width:生成图像的高度和宽度(以像素为单位)
+num_inference_steps:去噪步数,更多的去噪步骤通常以较慢的推理速度为代价生成更高质量的图像
+guidance_scale:更高的guidance_scale值鼓励模型生成与文本提示紧密相关的图像,但会降低图像质量
+sag_scale:在[0,1]之间选择以获得更好的质量
+negative_prompt:指导图像生成不包含哪些内容的文本提示
+num_images_per_prompt:每个提示生成的图像数量
+output_type:生成图像的输出格式,可以是PIL.Image或np.array
+3.StableDiffusionSAGPipeline的其他方法:
+enable_vae_slicing和disable_vae_slicing:启用/禁用VAE切片解码以节省内存并允许更大的批量大小
+encode_prompt:将提示编码为文本编码器隐藏状态
+StableDiffusionPipelineOutput:
+4.StableDiffusionSAGPipeline的__call__方法返回一个StableDiffusionPipelineOutput对象,其中包含:
+images:生成的PIL图像列表或形状为(batch_size,height,width,num_channels)的NumPy数组
+nsfw_content_detected:指示相应生成的图像是否包含"不适合工作"(nsfw)内容的布尔值列表
+总:
+总的来说,StableDiffusionSAGPipeline提供了一种强大而灵活的方式来从文本提示生成高质量图像。通过调整各种参数,如guidance_scale、sag_scale和num_inference_steps,用户可以控制生成图像的质量和生成过程的速度。此外,该管道还提供了其他实用的功能,如VAE切片解码和提示编码,以进一步优化生成过程。通过理解和利用StableDiffusionSAGPipeline及其相关组件,用户可以充分发挥Stable Diffusion模型在文本到图像生成任务中的潜力。
+
+Semantic Guidance
+总:
+本文是Diffusers库教程文档的一部分,主要介绍了Stable Diffusion模型中的Semantic Guidance(语义引导)技术。通过使用Semantic Guidance,用户可以更灵活地控制图像生成过程,对生成的图像进行细微且广泛的编辑,同时保持原始图像构图不变。
+分:
+1.Semantic Guidance(SEGA)是在论文"SEGA: Instructing Text-to-Image Models using Semantic Guidance"中提出的,它可以广泛应用于任何使用classifier-free guidance的生成式架构。
+2.Semantic Guidance允许用户以直观的方式引导扩散过程,从而对生成的图像进行细微且广泛的编辑,例如改变构图和风格,以及优化整体艺术构想。
+3.文中介绍了SemanticStableDiffusionPipeline类,它继承自DiffusionPipeline,并基于StableDiffusionPipeline构建。该类实现了使用Stable Diffusion进行文本到图像生成和潜在编辑的管道。
+4.SemanticStableDiffusionPipeline的__call__方法接受多个参数,包括prompt、height、width、num_inference_steps、guidance_scale等,用于控制图像生成过程。此外,还引入了一些与语义引导相关的参数,如editing_prompt、reverse_editing_direction、edit_guidance_scale等。
+5.文中给出了使用SemanticStableDiffusionPipeline进行图像生成和编辑的示例代码。通过设置不同的参数,可以实现对生成图像的各种控制,如增加微笑、戴眼镜、卷发、胡须等。
+6.最后,文中介绍了SemanticStableDiffusionPipelineOutput类,它是Stable Diffusion管道的输出类,包含生成的图像列表和对应的NSFW(不适合工作)内容检测结果。
+总:
+总的来说,本文主要介绍了如何在Stable Diffusion模型中使用Semantic Guidance技术对图像生成过程进行更灵活的控制和编辑。通过使用SemanticStableDiffusionPipeline类及其相关参数,用户可以实现对生成图像的各种细微且广泛的修改,同时保持原始图像构图不变。这种技术为文本到图像生成模型提供了更强大的语义控制能力,使其更加实用和灵活。
+
+Shap-E
+这篇文章主要介绍了Diffusers库中的Shap-E模型及其相关的pipeline。Shap-E是一个由OpenAI提出的conditional 3D生成模型,可以直接生成隐式函数(implicit function)的参数,从而渲染出带纹理的3D网格模型和NeRF模型。下面我将对文章的主要内容进行详细讲解:
+1.ShapEPipeline类
+这个pipeline用于根据文本提示(prompt)生成3D资源的latent representation,并用NeRF方法渲染。它包含以下主要组件:
+prior: 用于从文本embedding近似图像embedding的unCLIP prior模型
+text_encoder: 经过预训练的CLIP文本编码器
+tokenizer: 用于将文本转化为token的CLIP tokenizer
+scheduler: 与prior模型配合使用的scheduler,用于生成图像embedding
+shap_e_renderer: 将生成的latent投影到MLP的参数空间,创建具有NeRF渲染方法的3D对象
+pipeline的__call__方法接受prompt、inference step数量、guidance scale等参数,返回渲染好的3D图像。
+2.ShapEImg2ImgPipeline类
+这个pipeline的作用与ShapEPipeline类似,区别在于它以图像而非文本作为输入,用于生成与输入图像相关的3D资源。除了image_encoder和image_processor之外,它的组件与ShapEPipeline基本相同。
+3.ShapEPipelineOutput类
+这是ShapEPipeline和ShapEImg2ImgPipeline的输出类,包含一个用于3D渲染的图像列表。
+总的来说,这篇教程详细介绍了如何使用Diffusers库中的Shap-E相关pipeline来根据文本提示或图像生成对应的3D模型。通过调节不同的参数如guidance_scale和inference_steps,可以控制生成3D模型的效果。Shap-E是一个非常强大的3D生成模型,支持多种输入和输出形式,有望在3D内容创作领域发挥重要作用。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
